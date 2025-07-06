@@ -1,74 +1,63 @@
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  CreateDateColumn,
-  UpdateDateColumn,
-  OneToMany,
-  Index,
-} from 'typeorm';
-import { Exclude } from 'class-transformer';
+import { Entity, PrimaryKey, Property, Unique, Index } from '@mikro-orm/core';
+import { v4 } from 'uuid';
 
-@Entity('users')
-@Index('IDX_user_email', ['email'], { unique: true })
-@Index('IDX_user_username', ['username'], { unique: true })
+@Entity()
 export class User {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+  @PrimaryKey({ type: 'uuid' })
+  id: string = v4();
 
-  @Column({ unique: true, length: 255 })
-  email: string;
+  @Property({ unique: true })
+  @Index()
+  email!: string;
 
-  @Column({ unique: true, length: 50 })
-  username: string;
+  @Property({ unique: true })
+  @Index()
+  username!: string;
 
-  @Column({ name: 'display_name', length: 100 })
-  displayName: string;
+  @Property()
+  password!: string;
 
-  @Column({ select: false })
-  @Exclude()
-  password: string;
+  @Property({ nullable: true })
+  firstName?: string;
 
-  @Column({ name: 'profile_image_url', nullable: true })
-  profileImageUrl?: string;
+  @Property({ nullable: true })
+  lastName?: string;
 
-  @Column({ type: 'text', nullable: true })
+  @Property({ nullable: true })
+  avatarUrl?: string;
+
+  @Property({ nullable: true })
   bio?: string;
 
-  @Column({ name: 'is_active', default: true })
-  isActive: boolean;
+  @Property({ type: 'boolean', default: true })
+  isActive: boolean = true;
 
-  @Column({ name: 'is_verified', default: false })
-  isVerified: boolean;
+  @Property({ type: 'boolean', default: false })
+  isVerified: boolean = false;
 
-  @Column({ name: 'last_login_at', type: 'timestamp', nullable: true })
+  @Property({ nullable: true })
+  @Index()
   lastLoginAt?: Date;
 
-  @Column({ name: 'spot_count', default: 0 })
-  spotCount: number;
+  @Property({ type: 'json', nullable: true })
+  preferences?: Record<string, any>;
 
-  @Column({ name: 'spark_count', default: 0 })
-  sparkCount: number;
+  @Property({ type: 'decimal', precision: 10, scale: 8, nullable: true })
+  @Index()
+  latitude?: number;
 
-  @Column({ name: 'match_count', default: 0 })
-  matchCount: number;
+  @Property({ type: 'decimal', precision: 11, scale: 8, nullable: true })
+  @Index()
+  longitude?: number;
 
-  @Column({ name: 'is_online', default: false })
-  isOnline: boolean;
+  @Property({ type: 'timestamptz', defaultRaw: 'CURRENT_TIMESTAMP' })
+  @Index()
+  createdAt: Date = new Date();
 
-  @Column({ name: 'last_seen_at', type: 'timestamp', nullable: true })
-  lastSeenAt?: Date;
+  @Property({ type: 'timestamptz', defaultRaw: 'CURRENT_TIMESTAMP', onUpdate: () => new Date() })
+  updatedAt: Date = new Date();
 
-  @CreateDateColumn({ name: 'created_at' })
-  createdAt: Date;
-
-  @UpdateDateColumn({ name: 'updated_at' })
-  updatedAt: Date;
-
-  // Relations will be added as we create other entities
-  // @OneToMany(() => SignalSpot, spot => spot.author)
-  // spots: SignalSpot[];
-
-  // @OneToMany(() => SignalSpark, spark => spark.author)
-  // sparks: SignalSpark[];
+  constructor() {
+    this.id = v4();
+  }
 } 

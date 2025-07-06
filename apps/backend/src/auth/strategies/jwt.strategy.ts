@@ -1,49 +1,37 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
-import { ConfigService } from '@nestjs/config';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager } from '@mikro-orm/core';
 import { User } from '../../entities/user.entity';
 
 export interface JwtPayload {
   sub: string;
   email: string;
-  username: string;
   iat?: number;
   exp?: number;
 }
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor(
-    @InjectRepository(User)
-    private readonly userRepository: Repository<User>,
-    private readonly configService: ConfigService,
-  ) {
+  constructor(private readonly em: EntityManager) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: configService.get<string>('JWT_SECRET'),
+      secretOrKey: process.env.JWT_SECRET || 'your-secret-key',
     });
   }
 
   async validate(payload: JwtPayload): Promise<User> {
     const { sub: userId } = payload;
     
-    const user = await this.userRepository.findOne({
-      where: { id: userId, isActive: true },
+    const user = await this.em.findOne(User, { 
+      id: userId,
+      isActive: true 
     });
 
     if (!user) {
-      throw new UnauthorizedException('Invalid token');
+      throw new UnauthorizedException('User not found or inactive');
     }
-
-    // Update last seen
-    await this.userRepository.update(userId, {
-      lastSeenAt: new Date(),
-      isOnline: true,
-    });
 
     return user;
   }

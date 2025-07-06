@@ -10,14 +10,9 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
-import { AuthService, LoginRequest, RegisterRequest, AuthTokens } from './auth.service';
+import { AuthService, LoginRequest, RegisterRequest, AuthResponse } from './auth.service';
 import { User } from '../entities/user.entity';
 import { GetUser } from './decorators/get-user.decorator';
-
-export interface AuthResponse {
-  user: User;
-  tokens: AuthTokens;
-}
 
 export interface RefreshTokenRequest {
   refreshToken: string;
@@ -55,7 +50,9 @@ export class AuthController {
   }
 
   @Post('refresh')
+  @UseGuards(AuthGuard('jwt'))
   @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Refresh access token' })
   @ApiResponse({ 
     status: 200, 
@@ -63,8 +60,8 @@ export class AuthController {
     type: Object, // Will define proper DTO later
   })
   @ApiResponse({ status: 401, description: 'Invalid refresh token' })
-  async refreshToken(@Body() refreshDto: RefreshTokenRequest): Promise<AuthTokens> {
-    return this.authService.refreshToken(refreshDto.refreshToken);
+  async refreshToken(@GetUser() user: User): Promise<Pick<AuthResponse, 'accessToken' | 'refreshToken'>> {
+    return this.authService.refreshToken(user.id);
   }
 
   @Post('logout')
@@ -97,7 +94,7 @@ export class AuthController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Validate current token' })
   @ApiResponse({ status: 200, description: 'Token is valid' })
-  @ApiResponse({ status: 401, description: 'Token is invalid' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
   async validateToken(@GetUser() user: User): Promise<{ valid: boolean; user: User }> {
     return { valid: true, user };
   }

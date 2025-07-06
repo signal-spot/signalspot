@@ -1,27 +1,18 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule, ConfigService } from '@nestjs/config';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { getDatabaseConfig } from '../database/database.config';
-import { AuthModule } from '../auth/auth.module';
+import { ConfigModule } from '@nestjs/config';
+import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { AuthModule } from '../auth/auth.module';
+import { databaseConfig } from '../database/database.config';
 
 @Module({
   imports: [
-    // Global configuration
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: ['.env.local', '.env'],
     }),
-    
-    // Database configuration
-    TypeOrmModule.forRootAsync({
-      imports: [ConfigModule],
-      useFactory: getDatabaseConfig,
-      inject: [ConfigService],
-    }),
-    
-    // Feature modules
+    MikroOrmModule.forRoot(databaseConfig),
     AuthModule,
   ],
   controllers: [AppController],

@@ -5,10 +5,9 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager } from '@mikro-orm/core';
 import * as bcrypt from 'bcryptjs';
-import { ConfigService } from '@nestjs/config';
+
 import { User } from '../entities/user.entity';
 import { JwtPayload } from './strategies/jwt.strategy';
 
@@ -26,25 +25,37 @@ export interface LoginRequest {
 export interface RegisterRequest {
   email: string;
   username: string;
-  displayName: string;
+  firstName?: string;
+  lastName?: string;
   password: string;
+}
+
+export interface AuthResponse {
+  accessToken: string;
+  refreshToken: string;
+  user: {
+    id: string;
+    email: string;
+    username: string;
+    firstName?: string;
+    lastName?: string;
+    avatarUrl?: string;
+  };
 }
 
 @Injectable()
 export class AuthService {
   constructor(
-    @InjectRepository(User)
-    private readonly userRepository: Repository<User>,
+    private readonly em: EntityManager,
     private readonly jwtService: JwtService,
-    private readonly configService: ConfigService,
   ) {}
 
-  async register(registerDto: RegisterRequest): Promise<{ user: User; tokens: AuthTokens }> {
-    const { email, username, displayName, password } = registerDto;
+  async register(registerDto: RegisterRequest): Promise<AuthResponse> {
+    const { email, username, firstName, lastName, password } = registerDto;
 
     // Check if user already exists
-    const existingUser = await this.userRepository.findOne({
-      where: [{ email }, { username }],
+    const existingUser = await this.em.findOne(User, {
+      $or: [{ email }, { username }],
     });
 
     if (existingUser) {
@@ -57,147 +68,110 @@ export class AuthService {
     }
 
     // Hash password
-    const saltRounds = 12;
-    const hashedPassword = await bcrypt.hash(password, saltRounds);
+    const hashedPassword = await bcrypt.hash(password, 12);
 
-    // Create user
-    const user = this.userRepository.create({
+    // Create new user
+    const user = this.em.create(User, {
       email,
       username,
-      displayName,
+      firstName,
+      lastName,
       password: hashedPassword,
     });
 
-    const savedUser = await this.userRepository.save(user);
+    await this.em.persistAndFlush(user);
 
     // Generate tokens
-    const tokens = await this.generateTokens(savedUser);
+    const tokens = await this.generateTokens(user.id, user.email);
 
-    // Update login info
-    await this.userRepository.update(savedUser.id, {
-      lastLoginAt: new Date(),
-      isOnline: true,
-    });
-
-    // Remove password from response
-    delete savedUser.password;
-
-    return { user: savedUser, tokens };
+    return {
+      ...tokens,
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        avatarUrl: user.avatarUrl,
+      },
+    };
   }
 
-  async login(loginDto: LoginRequest): Promise<{ user: User; tokens: AuthTokens }> {
+  async login(loginDto: LoginRequest): Promise<AuthResponse> {
     const { email, password } = loginDto;
 
-    // Find user with password
-    const user = await this.userRepository.findOne({
-      where: { email, isActive: true },
-      select: ['id', 'email', 'username', 'displayName', 'password', 'profileImageUrl', 'bio'],
-    });
-
+    // Find user by email
+    const user = await this.em.findOne(User, { email });
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // Verify password
+    // Check password
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    // Update last login
+    user.lastLoginAt = new Date();
+    await this.em.persistAndFlush(user);
+
     // Generate tokens
-    const tokens = await this.generateTokens(user);
+    const tokens = await this.generateTokens(user.id, user.email);
 
-    // Update login info
-    await this.userRepository.update(user.id, {
-      lastLoginAt: new Date(),
-      isOnline: true,
-    });
-
-    // Remove password from response
-    delete user.password;
-
-    return { user, tokens };
+    return {
+      ...tokens,
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        avatarUrl: user.avatarUrl,
+      },
+    };
   }
 
   async logout(userId: string): Promise<void> {
-    await this.userRepository.update(userId, {
-      isOnline: false,
-      lastSeenAt: new Date(),
-    });
-  }
-
-  async refreshToken(refreshToken: string): Promise<AuthTokens> {
-    try {
-      const payload = this.jwtService.verify(refreshToken, {
-        secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
-      });
-
-      const user = await this.userRepository.findOne({
-        where: { id: payload.sub, isActive: true },
-      });
-
-      if (!user) {
-        throw new UnauthorizedException('Invalid refresh token');
-      }
-
-      return this.generateTokens(user);
-    } catch (error) {
-      throw new UnauthorizedException('Invalid refresh token');
+    // In a real app, you might want to blacklist the token
+    // For now, we'll just update the user's last seen
+    const user = await this.em.findOne(User, { id: userId });
+    if (user) {
+      user.lastLoginAt = new Date();
+      await this.em.persistAndFlush(user);
     }
   }
 
-  private async generateTokens(user: User): Promise<AuthTokens> {
-    const payload: JwtPayload = {
-      sub: user.id,
-      email: user.email,
-      username: user.username,
-    };
+  async refreshToken(userId: string): Promise<Pick<AuthResponse, 'accessToken' | 'refreshToken'>> {
+    const user = await this.em.findOne(User, { id: userId });
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
 
-    const accessTokenExpiration = this.configService.get<string>('JWT_EXPIRATION', '7d');
-    const refreshTokenExpiration = this.configService.get<string>('JWT_REFRESH_EXPIRATION', '30d');
+    return this.generateTokens(user.id, user.email);
+  }
+
+  private async generateTokens(userId: string, email: string) {
+    const payload = { sub: userId, email };
 
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, {
-        secret: this.configService.get<string>('JWT_SECRET'),
-        expiresIn: accessTokenExpiration,
+        secret: process.env.JWT_SECRET || 'your-secret-key',
+        expiresIn: '15m',
       }),
       this.jwtService.signAsync(payload, {
-        secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
-        expiresIn: refreshTokenExpiration,
+        secret: process.env.JWT_REFRESH_SECRET || 'your-refresh-secret-key',
+        expiresIn: '7d',
       }),
     ]);
-
-    // Calculate expiration timestamp
-    const expiresIn = Date.now() + this.parseExpirationToMs(accessTokenExpiration);
 
     return {
       accessToken,
       refreshToken,
-      expiresIn,
     };
   }
 
-  private parseExpirationToMs(expiration: string): number {
-    const unit = expiration.slice(-1);
-    const value = parseInt(expiration.slice(0, -1));
-
-    switch (unit) {
-      case 's':
-        return value * 1000;
-      case 'm':
-        return value * 60 * 1000;
-      case 'h':
-        return value * 60 * 60 * 1000;
-      case 'd':
-        return value * 24 * 60 * 60 * 1000;
-      default:
-        return 7 * 24 * 60 * 60 * 1000; // 7 days default
-    }
-  }
-
   async validateUser(userId: string): Promise<User | null> {
-    return this.userRepository.findOne({
-      where: { id: userId, isActive: true },
-    });
+    return this.em.findOne(User, { id: userId });
   }
 } 
