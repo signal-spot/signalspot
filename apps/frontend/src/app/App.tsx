@@ -3,6 +3,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { StatusBar } from 'react-native';
 import { AuthProvider, useAuth } from '../providers/AuthProvider';
 import { QueryProvider } from '../providers/QueryProvider';
+import { LocationProvider } from '../providers/LocationProvider';
 import { RootNavigator } from '../navigation/RootNavigator';
 
 const AppContent: React.FC = () => {
@@ -26,7 +27,9 @@ export const App: React.FC = () => {
   return (
     <QueryProvider>
       <AuthProvider>
-        <AppContent />
+        <LocationProvider>
+          <AppContent />
+        </LocationProvider>
       </AuthProvider>
     </QueryProvider>
   );

@@ -1,0 +1,111 @@
+# 백엔드 쿼리 최적화 & N+1 방지 Best Practice
+
+## **N+1 문제 방지**
+- 항상 연관 데이터가 필요한 경우 eager/lazy loading 전략을 명확히 지정
+- MikroORM/NestJS에서 `populate` 옵션을 적극 활용
+- 여러 엔티티를 반복적으로 쿼리하지 말고, 한 번에 join/fetch 하도록 설계
+- 서비스/리포지토리 계층에서 데이터 접근 패턴을 표준화
+
+```typescript
+// ✅ DO: 필요한 관계를 한 번에 fetch
+const users = await em.find(User, {}, { populate: ['profile', 'roles'] });
+
+// ✅ DO: QueryBuilder로 join fetch 사용
+const posts = await em.createQueryBuilder(Post, 'p')
+  .leftJoinAndSelect('p.author')
+  .leftJoinAndSelect('p.comments')
+  .getResultList();
+
+// ❌ DON'T: 반복적으로 쿼리하여 N+1 발생
+for (const user of users) {
+  const profile = await em.findOne(Profile, { user: user.id }); // N번 쿼리
+}
+```
+
+## **쿼리 최적화 원칙**
+- 필요한 필드만 select (projection 사용)
+- where 조건에 인덱스 필드 사용
+- limit/offset, pagination 적극 활용
+- 불필요한 정렬, group by, join 지양
+- 대량 데이터는 stream/batch 처리
+
+```typescript
+// ✅ DO: Projection으로 필요한 필드만 조회
+const users = await em.find(User, {}, { fields: ['id', 'email', 'username'] });
+
+// ✅ DO: 인덱스 필드 where 조건
+const user = await em.findOne(User, { email }); // email에 인덱스
+
+// ✅ DO: Pagination
+const page = 2;
+const pageSize = 20;
+const users = await em.find(User, {}, { limit: pageSize, offset: (page-1)*pageSize });
+
+// ✅ DO: Stream/batch 처리
+const stream = em.createQueryBuilder(Log, 'l').stream();
+for await (const log of stream) {
+  // 처리
+}
+```
+
+## **쿼리 성능 모니터링**
+- 쿼리 로그 활성화 및 분석
+- 느린 쿼리(>100ms) 경고/로깅
+- explain plan으로 쿼리 실행계획 점검
+- DB 인덱스 주기적 점검 및 최적화
+
+```typescript
+// ✅ DO: MikroORM 쿼리 로그 활성화
+const orm = await MikroORM.init({
+  ...config,
+  debug: process.env.NODE_ENV !== 'production',
+});
+
+// ✅ DO: 쿼리 실행시간 측정 및 경고
+const start = Date.now();
+const result = await em.find(User, {});
+const duration = Date.now() - start;
+if (duration > 100) {
+  logger.warn(`Slow query detected: ${duration}ms`);
+}
+
+// ✅ DO: 쿼리 실행계획 점검
+await em.getConnection().execute('EXPLAIN ANALYZE SELECT * FROM users WHERE ...');
+```
+
+## **Repository/Service 계층 표준화**
+- 모든 데이터 접근은 Repository/Service 계층에서만 수행
+- 쿼리 최적화 패턴을 리포지토리 메서드에 캡슐화
+- 반복되는 쿼리 패턴은 유틸/헬퍼로 추출
+
+```typescript
+// ✅ DO: 리포지토리에서 최적화된 쿼리 제공
+@Injectable()
+export class UserRepository {
+  constructor(private readonly em: EntityManager) {}
+
+  async findWithProfileAndRoles(userId: string) {
+    return this.em.findOne(User, { id: userId }, { populate: ['profile', 'roles'] });
+  }
+
+  async findPaged(page: number, pageSize: number) {
+    return this.em.find(User, {}, { limit: pageSize, offset: (page-1)*pageSize });
+  }
+}
+```
+
+## **Anti-Patterns (지양해야 할 패턴)**
+- ❌ for/while/map 등에서 반복적으로 findOne/쿼리 호출
+- ❌ 모든 필드/관계를 무조건 fetch (overfetching)
+- ❌ where 조건에 인덱스 없는 필드 사용
+- ❌ 대량 데이터 전체 select 후 메모리에서 필터링
+- ❌ 서비스 계층이 아닌 컨트롤러/라우터에서 직접 쿼리
+
+## **실제 코드에서 발견 시 반드시 리팩터링/리뷰 요청**
+- 반복 쿼리, N+1, overfetching, 느린 쿼리, 불필요한 join 등 발견 시 즉시 개선
+- 코드리뷰에서 쿼리 성능/패턴 반드시 체크
+- 쿼리 최적화 룰 위반 시 코드리뷰에서 blocking
+description:
+globs:
+alwaysApply: false
+---

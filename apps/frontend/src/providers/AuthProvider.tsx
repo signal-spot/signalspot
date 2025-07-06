@@ -1,75 +1,24 @@
-import React, { createContext, useContext, useReducer, useEffect } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { User, AuthTokens } from 'shared';
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { authService, User, LoginRequest, RegisterRequest } from '../services/auth.service';
 
-interface AuthState {
+interface AuthContextType {
   user: User | null;
-  tokens: AuthTokens | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-}
-
-type AuthAction =
-  | { type: 'SET_LOADING'; payload: boolean }
-  | { type: 'SET_USER'; payload: User | null }
-  | { type: 'SET_TOKENS'; payload: AuthTokens | null }
-  | { type: 'SIGN_IN'; payload: { user: User; tokens: AuthTokens } }
-  | { type: 'SIGN_OUT' }
-  | { type: 'RESTORE_AUTH'; payload: { user: User; tokens: AuthTokens } | null };
-
-interface AuthContextType extends AuthState {
-  signIn: (user: User, tokens: AuthTokens) => Promise<void>;
-  signOut: () => Promise<void>;
-  updateUser: (user: User) => Promise<void>;
+  login: (credentials: LoginRequest) => Promise<void>;
+  register: (userData: RegisterRequest) => Promise<void>;
+  logout: () => Promise<void>;
+  refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const initialState: AuthState = {
-  user: null,
-  tokens: null,
-  isLoading: true,
-  isAuthenticated: false,
-};
-
-const authReducer = (state: AuthState, action: AuthAction): AuthState => {
-  switch (action.type) {
-    case 'SET_LOADING':
-      return { ...state, isLoading: action.payload };
-    case 'SET_USER':
-      return { ...state, user: action.payload };
-    case 'SET_TOKENS':
-      return { ...state, tokens: action.payload };
-    case 'SIGN_IN':
-      return {
-        ...state,
-        user: action.payload.user,
-        tokens: action.payload.tokens,
-        isAuthenticated: true,
-        isLoading: false,
-      };
-    case 'SIGN_OUT':
-      return {
-        ...state,
-        user: null,
-        tokens: null,
-        isAuthenticated: false,
-        isLoading: false,
-      };
-    case 'RESTORE_AUTH':
-      if (action.payload) {
-        return {
-          ...state,
-          user: action.payload.user,
-          tokens: action.payload.tokens,
-          isAuthenticated: true,
-          isLoading: false,
-        };
-      }
-      return { ...state, isLoading: false };
-    default:
-      return state;
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
   }
+  return context;
 };
 
 interface AuthProviderProps {
@@ -77,79 +26,120 @@ interface AuthProviderProps {
 }
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
-  const [state, dispatch] = useReducer(authReducer, initialState);
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const storeAuthData = async (user: User, tokens: AuthTokens) => {
-    try {
-      await AsyncStorage.setItem('@auth_user', JSON.stringify(user));
-      await AsyncStorage.setItem('@auth_tokens', JSON.stringify(tokens));
-    } catch (error) {
-      console.error('Failed to store auth data:', error);
-    }
-  };
-
-  const removeAuthData = async () => {
-    try {
-      await AsyncStorage.removeItem('@auth_user');
-      await AsyncStorage.removeItem('@auth_tokens');
-    } catch (error) {
-      console.error('Failed to remove auth data:', error);
-    }
-  };
-
-  const restoreAuthData = async () => {
-    try {
-      const userString = await AsyncStorage.getItem('@auth_user');
-      const tokensString = await AsyncStorage.getItem('@auth_tokens');
-
-      if (userString && tokensString) {
-        const user = JSON.parse(userString);
-        const tokens = JSON.parse(tokensString);
-        
-        // Check if tokens are still valid (basic check)
-        const now = Date.now();
-        const tokenExp = tokens.expiresIn * 1000; // Convert to milliseconds
-        
-        if (now < tokenExp) {
-          dispatch({ type: 'RESTORE_AUTH', payload: { user, tokens } });
-          return;
-        }
-      }
-      
-      // If no valid auth data found
-      dispatch({ type: 'RESTORE_AUTH', payload: null });
-    } catch (error) {
-      console.error('Failed to restore auth data:', error);
-      dispatch({ type: 'RESTORE_AUTH', payload: null });
-    }
-  };
-
-  const signIn = async (user: User, tokens: AuthTokens) => {
-    await storeAuthData(user, tokens);
-    dispatch({ type: 'SIGN_IN', payload: { user, tokens } });
-  };
-
-  const signOut = async () => {
-    await removeAuthData();
-    dispatch({ type: 'SIGN_OUT' });
-  };
-
-  const updateUser = async (user: User) => {
-    if (state.tokens) {
-      await storeAuthData(user, state.tokens);
-    }
-    dispatch({ type: 'SET_USER', payload: user });
-  };
-
+  // Initialize authentication state
   useEffect(() => {
-    restoreAuthData();
+    initializeAuth();
   }, []);
 
+  const initializeAuth = async () => {
+    try {
+      setIsLoading(true);
+      
+      // Check if user is authenticated
+      const isAuthenticated = await authService.isAuthenticated();
+      
+      if (isAuthenticated) {
+        // Try to get user from storage first
+        const storedUser = await authService.getCurrentUser();
+        
+        if (storedUser) {
+          setUser(storedUser);
+          
+          // Optionally refresh profile from server
+          try {
+            const freshProfile = await authService.getProfile();
+            setUser(freshProfile);
+            await authService.setCurrentUser(freshProfile);
+          } catch (error) {
+            console.warn('Failed to refresh profile:', error);
+            // Keep stored user if refresh fails
+          }
+        } else {
+          // No stored user but has tokens, try to get profile
+          try {
+            const profile = await authService.getProfile();
+            setUser(profile);
+            await authService.setCurrentUser(profile);
+          } catch (error) {
+            console.error('Failed to get profile:', error);
+            // Clear invalid tokens
+            await authService.logout();
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Auth initialization failed:', error);
+      // Clear any corrupted auth data
+      await authService.logout();
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const login = async (credentials: LoginRequest) => {
+    try {
+      setIsLoading(true);
+      const response = await authService.login(credentials);
+      setUser(response.user);
+    } catch (error) {
+      console.error('Login failed:', error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const register = async (userData: RegisterRequest) => {
+    try {
+      setIsLoading(true);
+      const response = await authService.register(userData);
+      setUser(response.user);
+    } catch (error) {
+      console.error('Registration failed:', error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const logout = async () => {
+    try {
+      setIsLoading(true);
+      await authService.logout();
+      setUser(null);
+    } catch (error) {
+      console.error('Logout failed:', error);
+      // Still clear local state even if server call fails
+      setUser(null);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const refreshProfile = async () => {
+    try {
+      if (!user) return;
+      
+      const freshProfile = await authService.getProfile();
+      setUser(freshProfile);
+      await authService.setCurrentUser(freshProfile);
+    } catch (error) {
+      console.error('Profile refresh failed:', error);
+      throw error;
+    }
+  };
+
   const value: AuthContextType = {
-    ...state,
-    signIn,
-    signOut,
-    updateUser,
+    user,
+    isLoading,
+    isAuthenticated: !!user,
+    login,
+    register,
+    logout,
+    refreshProfile,
   };
 
   return (
@@ -157,12 +147,4 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       {children}
     </AuthContext.Provider>
   );
-};
-
-export const useAuth = (): AuthContextType => {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
 }; 

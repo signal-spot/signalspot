@@ -1,0 +1,45 @@
+# Development Dockerfile for React Native Mobile App
+FROM node:18-alpine AS development
+
+# Install system dependencies for React Native mobile development
+RUN apk add --no-cache \
+    bash \
+    git \
+    curl \
+    python3 \
+    make \
+    g++ \
+    openjdk11-jre \
+    android-tools
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+COPY apps/frontend/package.json ./apps/frontend/
+COPY shared/package.json ./shared/
+
+# Install all dependencies (including dev dependencies)
+RUN npm ci
+
+# Copy source code
+COPY . .
+
+# Create non-root user
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 reactnative
+
+# Change ownership of the app directory
+RUN chown -R reactnative:nodejs /app
+
+USER reactnative
+
+# Expose Metro bundler port
+EXPOSE 8081
+
+# Health check for Metro bundler
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:8081/status || exit 1
+
+# Start Metro bundler for development
+CMD ["npx", "react-native", "start", "--reset-cache"] 

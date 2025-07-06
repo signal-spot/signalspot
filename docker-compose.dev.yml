@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  # Development backend with hot reload
+  backend:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile.dev
+      target: development
+    environment:
+      NODE_ENV: development
+      MIKRO_ORM_CLI_USE_TS_NODE: true
+      MIKRO_ORM_CLI_CONFIG: ./src/database/mikro-orm.config.ts
+    volumes:
+      - ./apps/backend/src:/app/apps/backend/src
+      - ./shared:/app/shared
+      - /app/node_modules
+      - /app/apps/backend/node_modules
+    command: npm run start:dev backend
+    ports:
+      - "3000:3000"
+      - "9229:9229" # Debug port
+
+  # React Native Metro Bundler for mobile development
+  metro:
+    profiles: []  # Always run in dev mode
+    environment:
+      NODE_ENV: development
+      REACT_NATIVE_PACKAGER_HOSTNAME: 0.0.0.0
+      METRO_CACHE_DIR: /app/node_modules/.cache/metro
+    volumes:
+      - ./apps/frontend:/app/apps/frontend
+      - ./shared:/app/shared
+      - metro_dev_cache:/app/node_modules/.cache
+    ports:
+      - "8081:8081"  # Metro bundler port
+    stdin_open: true
+    tty: true
+
+  # PostgreSQL with development settings
+  postgres:
+    environment:
+      POSTGRES_DB: signalspot_dev
+      POSTGRES_USER: dev_user
+      POSTGRES_PASSWORD: dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+      - ./scripts/dev-seed.sql:/docker-entrypoint-initdb.d/dev-seed.sql
+
+  # Redis with development settings
+  redis:
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_dev_data:/data
+
+  # Development tools (always enabled in dev)
+  adminer:
+    profiles: []  # Remove profiles to always run in dev
+    ports:
+      - "8080:8080"  # Change port to avoid conflict with Metro
+
+volumes:
+  postgres_dev_data:
+    driver: local
+  redis_dev_data:
+    driver: local
+  metro_dev_cache:
+    driver: local 

@@ -20,12 +20,9 @@ async function bootstrap() {
   app.setGlobalPrefix(globalPrefix);
   
   // CORS configuration
-  const allowedOrigins = configService.get<string>('ALLOWED_ORIGINS', 'http://localhost:3001');
   app.enableCors({
-    origin: allowedOrigins.split(','),
+    origin: process.env.FRONTEND_URL || 'http://localhost:8080',
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
   });
   
   // Global validation pipe
@@ -63,8 +60,17 @@ async function bootstrap() {
     });
   }
   
+  // 헬스체크 엔드포인트
+  app.use('/health', (req, res) => {
+    res.status(200).json({
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+    });
+  });
+  
   // Start server
-  const port = configService.get('PORT', 3000);
+  const port = process.env.PORT || 3000;
   await app.listen(port);
   
   Logger.log(

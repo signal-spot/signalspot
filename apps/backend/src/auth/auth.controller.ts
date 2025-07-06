@@ -5,16 +5,15 @@ import {
   HttpCode,
   HttpStatus,
   UseGuards,
-  Req,
   Get,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
-import { AuthService, LoginRequest, RegisterRequest, AuthResponse } from './auth.service';
-import { User } from '../entities/user.entity';
+import { AuthService, LoginDto, RegisterDto, AuthResponse } from './auth.service';
 import { GetUser } from './decorators/get-user.decorator';
+import { User } from '../entities/user.entity';
 
-export interface RefreshTokenRequest {
+class RefreshTokenDto {
   refreshToken: string;
 }
 
@@ -24,15 +23,14 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('register')
-  @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Register a new user' })
   @ApiResponse({ 
     status: 201, 
-    description: 'User successfully registered',
-    type: Object, // Will define proper DTO later
+    description: 'User successfully registered'
   })
+  @ApiResponse({ status: 400, description: 'Invalid input data' })
   @ApiResponse({ status: 409, description: 'Email or username already exists' })
-  async register(@Body() registerDto: RegisterRequest): Promise<AuthResponse> {
+  async register(@Body() registerDto: RegisterDto): Promise<AuthResponse> {
     return this.authService.register(registerDto);
   }
 
@@ -41,61 +39,84 @@ export class AuthController {
   @ApiOperation({ summary: 'Login user' })
   @ApiResponse({ 
     status: 200, 
-    description: 'User successfully logged in',
-    type: Object, // Will define proper DTO later
+    description: 'User successfully logged in'
   })
   @ApiResponse({ status: 401, description: 'Invalid credentials' })
-  async login(@Body() loginDto: LoginRequest): Promise<AuthResponse> {
+  async login(@Body() loginDto: LoginDto): Promise<AuthResponse> {
     return this.authService.login(loginDto);
   }
 
   @Post('refresh')
-  @UseGuards(AuthGuard('jwt'))
   @HttpCode(HttpStatus.OK)
-  @ApiBearerAuth()
   @ApiOperation({ summary: 'Refresh access token' })
   @ApiResponse({ 
     status: 200, 
     description: 'Token successfully refreshed',
-    type: Object, // Will define proper DTO later
+    schema: {
+      type: 'object',
+      properties: {
+        accessToken: { type: 'string' }
+      }
+    }
   })
   @ApiResponse({ status: 401, description: 'Invalid refresh token' })
-  async refreshToken(@GetUser() user: User): Promise<Pick<AuthResponse, 'accessToken' | 'refreshToken'>> {
-    return this.authService.refreshToken(user.id);
+  async refreshToken(@Body() refreshTokenDto: RefreshTokenDto): Promise<{ accessToken: string }> {
+    return this.authService.refreshToken(refreshTokenDto.refreshToken);
   }
 
   @Post('logout')
   @UseGuards(AuthGuard('jwt'))
-  @HttpCode(HttpStatus.NO_CONTENT)
   @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Logout user' })
-  @ApiResponse({ status: 204, description: 'User successfully logged out' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  async logout(@GetUser() user: User): Promise<void> {
-    return this.authService.logout(user.id);
+  @ApiResponse({ status: 200, description: 'User successfully logged out' })
+  async logout(@GetUser() user: User): Promise<{ message: string }> {
+    await this.authService.logout(user.id);
+    return { message: 'Successfully logged out' };
   }
 
-  @Get('me')
+  @Get('profile')
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get current user profile' })
+  @ApiOperation({ summary: 'Get user profile' })
   @ApiResponse({ 
     status: 200, 
     description: 'User profile retrieved successfully',
-    type: User,
+    schema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string' },
+        email: { type: 'string' },
+        username: { type: 'string' },
+        firstName: { type: 'string', nullable: true },
+        lastName: { type: 'string', nullable: true },
+        isEmailVerified: { type: 'boolean' },
+        createdAt: { type: 'string', format: 'date-time' },
+        lastLoginAt: { type: 'string', format: 'date-time', nullable: true }
+      }
+    }
   })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  async getProfile(@GetUser() user: User): Promise<User> {
-    return user;
+  async getProfile(@GetUser() user: User) {
+    return {
+      id: user.id,
+      email: user.email,
+      username: user.username,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      isEmailVerified: user.isEmailVerified,
+      createdAt: user.createdAt,
+      lastLoginAt: user.lastLoginAt,
+    };
   }
 
-  @Get('validate')
-  @UseGuards(AuthGuard('jwt'))
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Validate current token' })
-  @ApiResponse({ status: 200, description: 'Token is valid' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  async validateToken(@GetUser() user: User): Promise<{ valid: boolean; user: User }> {
-    return { valid: true, user };
+  @Get('health')
+  @ApiOperation({ summary: 'Health check for auth service' })
+  @ApiResponse({ status: 200, description: 'Auth service is healthy' })
+  getHealth() {
+    return {
+      status: 'ok',
+      service: 'auth',
+      timestamp: new Date().toISOString(),
+    };
   }
 } 

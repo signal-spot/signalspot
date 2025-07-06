@@ -1,0 +1,145 @@
+# 백엔드 커스텀 Exception & 일관된 예외 처리 Best Practice
+
+## **커스텀 Exception 계층 구조 설계**
+- 모든 도메인/비즈니스 예외는 커스텀 Exception 클래스로 정의
+- Exception 계층 구조를 명확히 설계 (Base → 도메인별 → 세부)
+- NestJS의 HttpException, NotFoundException, ConflictException 등 상속 활용
+- 도메인/비즈니스/인프라/권한/인증 등 용도별로 구분
+
+```typescript
+// ✅ DO: Base Exception 정의
+export abstract class AppException extends Error {
+  abstract readonly code: string;
+  abstract readonly statusCode: number;
+  constructor(message: string) {
+    super(message);
+    this.name = this.constructor.name;
+  }
+}
+
+// ✅ DO: 도메인별 커스텀 Exception
+export class UserNotFoundException extends AppException {
+  readonly code = 'USER_NOT_FOUND';
+  readonly statusCode = 404;
+  constructor(userId: string) {
+    super(`User with ID ${userId} not found`);
+  }
+}
+
+export class EmailAlreadyExistsException extends AppException {
+  readonly code = 'EMAIL_ALREADY_EXISTS';
+  readonly statusCode = 409;
+  constructor(email: string) {
+    super(`Email '${email}' is already registered`);
+  }
+}
+
+export class InvalidCredentialsException extends AppException {
+  readonly code = 'INVALID_CREDENTIALS';
+  readonly statusCode = 401;
+  constructor() {
+    super('Invalid email or password');
+  }
+}
+
+// ✅ DO: 인프라/권한/인증 등 세부 Exception
+export class DatabaseConnectionException extends AppException {
+  readonly code = 'DB_CONNECTION_ERROR';
+  readonly statusCode = 500;
+  constructor(message = 'Database connection failed') {
+    super(message);
+  }
+}
+
+export class PermissionDeniedException extends AppException {
+  readonly code = 'PERMISSION_DENIED';
+  readonly statusCode = 403;
+  constructor(action: string) {
+    super(`Permission denied: ${action}`);
+  }
+}
+```
+
+## **Exception Filter로 일관된 응답 포맷 제공**
+- 글로벌 Exception Filter에서 커스텀 Exception을 감지해 일관된 JSON 응답 제공
+- code, statusCode, message, timestamp, path 등 포함
+- HttpException, ValidationError 등도 통합 처리
+
+```typescript
+// ✅ DO: 글로벌 Exception Filter
+@Catch()
+export class AllExceptionsFilter implements ExceptionFilter {
+  catch(exception: unknown, host: ArgumentsHost): void {
+    const ctx = host.switchToHttp();
+    const response = ctx.getResponse<Response>();
+    const request = ctx.getRequest<Request>();
+
+    let status = 500;
+    let code = 'INTERNAL_ERROR';
+    let message = 'Internal server error';
+    let errors: any = undefined;
+
+    if (exception instanceof AppException) {
+      status = exception.statusCode;
+      code = exception.code;
+      message = exception.message;
+    } else if (exception instanceof HttpException) {
+      status = exception.getStatus();
+      const res = exception.getResponse();
+      if (typeof res === 'object') {
+        message = (res as any).message || exception.message;
+        errors = (res as any).errors;
+      } else {
+        message = res as string;
+      }
+    } else if (exception instanceof Error) {
+      message = exception.message;
+    }
+
+    response.status(status).json({
+      statusCode: status,
+      code,
+      message,
+      errors,
+      timestamp: new Date().toISOString(),
+      path: request.url,
+      method: request.method,
+    });
+  }
+}
+```
+
+## **서비스/도메인 계층에서 커스텀 Exception 적극 사용**
+- 서비스/도메인 계층에서 throw new CustomException() 패턴 사용
+- 컨트롤러에서는 try-catch 최소화, 예외는 글로벌 필터에서 일관 처리
+- 예외 발생 시 상세 메시지, 코드, 상태코드 명확히 전달
+
+```typescript
+// ✅ DO: 서비스/도메인 계층에서 커스텀 Exception 사용
+if (!user) {
+  throw new UserNotFoundException(userId);
+}
+if (await userRepo.existsByEmail(email)) {
+  throw new EmailAlreadyExistsException(email);
+}
+if (!user.verifyPassword(password)) {
+  throw new InvalidCredentialsException();
+}
+```
+
+## **Anti-Patterns (지양해야 할 패턴)**
+- ❌ 서비스/컨트롤러에서 직접 res.status().json()으로 에러 응답
+- ❌ 모든 예외를 HttpException만으로 처리
+- ❌ try-catch 남용, catch에서 무의미한 rethrow
+- ❌ 에러 메시지/코드/상태코드 불명확
+- ❌ 예외 발생 시 stack trace/log 남기지 않음
+
+## **코드리뷰 시 반드시 체크**
+- 커스텀 Exception 계층 구조/명명 규칙 준수
+- Exception Filter에서 일관된 응답 제공 여부
+- 서비스/도메인 계층에서 커스텀 Exception 적극 사용 여부
+- Anti-pattern 발견 시 즉시 리팩터링/리뷰 요청
+description:
+globs:
+alwaysApply: false
+---
