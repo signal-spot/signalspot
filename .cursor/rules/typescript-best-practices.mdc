@@ -1,0 +1,367 @@
+# TypeScript Best Practices & Awesome TypeScript
+
+## **Strict Type Safety**
+- Always use strict TypeScript configuration
+- Prefer explicit type annotations for public APIs
+- Use type guards for runtime type checking
+- Leverage discriminated unions for complex state management
+
+```typescript
+// ✅ DO: Strict typing with proper type guards
+interface User {
+  id: string;
+  email: string;
+  profile?: UserProfile;
+}
+
+function isUser(value: unknown): value is User {
+  return typeof value === 'object' && value !== null && 
+         'id' in value && 'email' in value;
+}
+
+// ✅ DO: Discriminated unions
+type ApiResponse<T> = 
+  | { status: 'success'; data: T }
+  | { status: 'error'; error: string }
+  | { status: 'loading' };
+
+// ❌ DON'T: Using any or loose typing
+function processData(data: any): any {
+  return data.someProperty;
+}
+```
+
+## **Advanced Type Patterns**
+- Use conditional types for complex type relationships
+- Leverage mapped types for transformations
+- Implement branded types for domain modeling
+- Use template literal types for string manipulation
+
+```typescript
+// ✅ DO: Conditional types
+type NonNullable<T> = T extends null | undefined ? never : T;
+
+// ✅ DO: Mapped types
+type Partial<T> = {
+  [P in keyof T]?: T[P];
+};
+
+type ReadonlyUser = {
+  readonly [K in keyof User]: User[K];
+};
+
+// ✅ DO: Branded types
+type UserId = string & { readonly brand: unique symbol };
+type Email = string & { readonly brand: unique symbol };
+
+function createUserId(id: string): UserId {
+  // Validation logic here
+  return id as UserId;
+}
+
+// ✅ DO: Template literal types
+type EventName = `on${Capitalize<string>}`;
+type ValidEvents = 'onClick' | 'onSubmit' | 'onLoad';
+```
+
+## **Generic Programming**
+- Use generic constraints to limit type parameters
+- Implement generic utility functions
+- Create reusable generic components
+- Use default generic parameters wisely
+
+```typescript
+// ✅ DO: Generic constraints
+interface Identifiable {
+  id: string;
+}
+
+function updateEntity<T extends Identifiable>(
+  entity: T, 
+  updates: Partial<Omit<T, 'id'>>
+): T {
+  return { ...entity, ...updates };
+}
+
+// ✅ DO: Generic utility functions
+function createRepository<T extends Identifiable>() {
+  return {
+    async findById(id: string): Promise<T | null> {
+      // Implementation
+      return null;
+    },
+    async save(entity: T): Promise<T> {
+      // Implementation
+      return entity;
+    }
+  };
+}
+
+// ✅ DO: Default generic parameters
+interface ApiOptions<T = Record<string, unknown>> {
+  baseUrl: string;
+  defaultParams?: T;
+}
+```
+
+## **Error Handling & Result Types**
+- Use Result/Either types for error handling
+- Implement proper error boundaries
+- Create specific error types
+- Use exhaustive error handling
+
+```typescript
+// ✅ DO: Result type pattern
+type Result<T, E = Error> = 
+  | { success: true; data: T }
+  | { success: false; error: E };
+
+async function fetchUser(id: string): Promise<Result<User, UserError>> {
+  try {
+    const user = await userRepository.findById(id);
+    if (!user) {
+      return { success: false, error: new UserNotFoundError(id) };
+    }
+    return { success: true, data: user };
+  } catch (error) {
+    return { success: false, error: error as UserError };
+  }
+}
+
+// ✅ DO: Specific error types
+abstract class AppError extends Error {
+  abstract readonly code: string;
+  abstract readonly statusCode: number;
+}
+
+class UserNotFoundError extends AppError {
+  readonly code = 'USER_NOT_FOUND';
+  readonly statusCode = 404;
+  
+  constructor(userId: string) {
+    super(`User with ID ${userId} not found`);
+  }
+}
+```
+
+## **Utility Types & Type Manipulation**
+- Master built-in utility types
+- Create custom utility types
+- Use key remapping in mapped types
+- Implement recursive type operations
+
+```typescript
+// ✅ DO: Custom utility types
+type DeepPartial<T> = {
+  [P in keyof T]?: T[P] extends object ? DeepPartial<T[P]> : T[P];
+};
+
+type RequiredFields<T, K extends keyof T> = T & Required<Pick<T, K>>;
+
+type OmitDeep<T, K extends string> = {
+  [P in keyof T as P extends K ? never : P]: 
+    T[P] extends object ? OmitDeep<T[P], K> : T[P];
+};
+
+// ✅ DO: Key remapping
+type Getters<T> = {
+  [K in keyof T as `get${Capitalize<string & K>}`]: () => T[K];
+};
+
+type UserGetters = Getters<User>;
+// Result: { getId(): string; getEmail(): string; }
+```
+
+## **Type-Safe Configuration**
+- Use const assertions for immutable data
+- Implement configuration validation
+- Create environment-specific types
+- Use satisfies operator for type checking
+
+```typescript
+// ✅ DO: Const assertions
+const ENVIRONMENTS = ['development', 'staging', 'production'] as const;
+type Environment = typeof ENVIRONMENTS[number];
+
+const config = {
+  apiUrl: 'https://api.example.com',
+  features: {
+    enableAnalytics: true,
+    enableDebug: false
+  }
+} as const;
+
+// ✅ DO: Configuration validation with satisfies
+type Config = {
+  apiUrl: string;
+  features: {
+    enableAnalytics: boolean;
+    enableDebug: boolean;
+  };
+};
+
+const appConfig = {
+  apiUrl: 'https://api.example.com',
+  features: {
+    enableAnalytics: true,
+    enableDebug: false,
+    enableExperimentalFeature: true // Extra property allowed
+  }
+} satisfies Config;
+```
+
+## **Performance & Bundle Size**
+- Use dynamic imports for code splitting
+- Implement tree-shakeable exports
+- Avoid importing entire libraries
+- Use type-only imports when possible
+
+```typescript
+// ✅ DO: Dynamic imports
+const LazyComponent = React.lazy(() => import('./HeavyComponent'));
+
+// ✅ DO: Type-only imports
+import type { User } from './types';
+import type { ComponentProps } from 'react';
+
+// ✅ DO: Tree-shakeable exports
+export { UserService } from './UserService';
+export { PostService } from './PostService';
+export type { User, Post } from './types';
+
+// ❌ DON'T: Import entire library
+import * as _ from 'lodash';
+
+// ✅ DO: Import specific functions
+import { debounce, throttle } from 'lodash';
+```
+
+## **Testing Types**
+- Write type tests alongside unit tests
+- Use type assertion helpers
+- Test generic type behavior
+- Validate error cases in types
+
+```typescript
+// ✅ DO: Type testing utilities
+type Expect<T extends true> = T;
+type Equal<X, Y> = (<T>() => T extends X ? 1 : 2) extends 
+                   (<T>() => T extends Y ? 1 : 2) ? true : false;
+
+// ✅ DO: Type tests
+type test1 = Expect<Equal<Result<string, Error>['success'], boolean>>;
+type test2 = Expect<Equal<UserGetters['getId'], () => string>>;
+
+// ✅ DO: Testing generic constraints
+function testGenericConstraint<T extends Identifiable>(entity: T) {
+  // @ts-expect-error - Should fail without id property
+  const invalid: T = { name: 'test' };
+  
+  const valid: T = { id: '123', name: 'test' } as T;
+  return valid;
+}
+```
+
+## **Declaration Files & Module Augmentation**
+- Create accurate declaration files
+- Use module augmentation properly
+- Implement global type definitions
+- Handle third-party library types
+
+```typescript
+// ✅ DO: Module augmentation
+declare module 'express' {
+  interface Request {
+    user?: User;
+    correlationId: string;
+  }
+}
+
+// ✅ DO: Global type definitions
+declare global {
+  namespace NodeJS {
+    interface ProcessEnv {
+      DATABASE_URL: string;
+      JWT_SECRET: string;
+      NODE_ENV: 'development' | 'staging' | 'production';
+    }
+  }
+}
+
+// ✅ DO: Third-party library types
+declare module 'some-library' {
+  export function someFunction(param: string): Promise<string>;
+  export interface SomeInterface {
+    property: number;
+  }
+}
+```
+
+## **Documentation & Comments**
+- Use TSDoc for comprehensive documentation
+- Document complex type relationships
+- Provide usage examples in comments
+- Explain non-obvious type decisions
+
+```typescript
+/**
+ * Repository pattern implementation for entities with audit fields.
+ * 
+ * @template T - The entity type that extends AuditableEntity
+ * @example
+ * ```typescript
+ * const userRepo = new AuditableRepository<User>();
+ * const user = await userRepo.findById('user-123');
+ * ```
+ */
+export class AuditableRepository<T extends AuditableEntity> {
+  /**
+   * Finds an entity by ID with automatic audit trail logging.
+   * 
+   * @param id - The unique identifier for the entity
+   * @returns Promise resolving to the entity or null if not found
+   * @throws {ValidationError} When ID format is invalid
+   */
+  async findById(id: string): Promise<T | null> {
+    // Implementation
+    return null;
+  }
+}
+```
+
+## **Configuration Rules**
+- Always enable strict mode in tsconfig.json
+- Use incremental compilation for performance
+- Enable all strict family flags
+- Configure path mapping for clean imports
+
+```json
+{
+  "compilerOptions": {
+    "strict": true,
+    "exactOptionalPropertyTypes": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
+    "allowUnusedLabels": false,
+    "allowUnreachableCode": false,
+    "incremental": true,
+    "skipLibCheck": true,
+    "baseUrl": "./src",
+    "paths": {
+      "@/*": ["*"],
+      "@/components/*": ["components/*"],
+      "@/services/*": ["services/*"]
+    }
+  }
+}
+```
+
+## **Common Anti-Patterns to Avoid**
+- ❌ Using `any` without proper justification
+- ❌ Overusing `as` type assertions
+- ❌ Creating overly complex nested generics
+- ❌ Ignoring compiler errors with `@ts-ignore`
+- ❌ Using function overloads when unions suffice
+- ❌ Creating unnecessarily deep inheritance hierarchies

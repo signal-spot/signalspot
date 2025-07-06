@@ -1,0 +1,963 @@
+# NestJS Best Practices & Advanced Patterns
+
+## **Module Architecture**
+- Use feature-based module organization
+- Implement proper module boundaries
+- Use barrel exports for clean imports
+- Create shared modules for common functionality
+- Follow single responsibility principle
+
+```typescript
+// ✅ DO: Feature-based module structure
+@Module({
+  imports: [
+    MikroOrmModule.forFeature([User, UserProfile]),
+    ConfigModule,
+    CacheModule,
+  ],
+  controllers: [UserController],
+  providers: [
+    UserService,
+    UserRepository,
+    UserValidator,
+    {
+      provide: 'USER_CACHE_KEY',
+      useValue: 'user:',
+    },
+  ],
+  exports: [UserService, UserRepository],
+})
+export class UserModule {}
+
+// ✅ DO: Shared module pattern
+@Module({
+  imports: [ConfigModule],
+  providers: [LoggerService, MetricsService],
+  exports: [LoggerService, MetricsService],
+})
+@Global()
+export class SharedModule {}
+```
+
+## **Dependency Injection Patterns**
+- Use constructor injection for required dependencies
+- Implement proper provider scoping
+- Use factory providers for complex configurations
+- Create custom decorators for cleaner code
+- Implement proper circular dependency resolution
+
+```typescript
+// ✅ DO: Constructor injection with proper typing
+@Injectable()
+export class UserService {
+  constructor(
+    private readonly userRepository: UserRepository,
+    private readonly eventEmitter: EventEmitter2,
+    private readonly logger: LoggerService,
+    @Inject('USER_CACHE_KEY') private readonly cacheKey: string,
+  ) {}
+}
+
+// ✅ DO: Factory provider pattern
+const databaseProviders = [
+  {
+    provide: 'DATABASE_CONNECTION',
+    useFactory: async (config: ConfigService): Promise<Connection> => {
+      return createConnection({
+        type: 'postgres',
+        host: config.get('DATABASE_HOST'),
+        port: config.get('DATABASE_PORT'),
+        username: config.get('DATABASE_USERNAME'),
+        password: config.get('DATABASE_PASSWORD'),
+        database: config.get('DATABASE_NAME'),
+      });
+    },
+    inject: [ConfigService],
+  },
+];
+
+// ✅ DO: Custom decorator for cleaner controller code
+export const GetUser = createParamDecorator(
+  (data: keyof User | undefined, ctx: ExecutionContext): User | any => {
+    const request = ctx.switchToHttp().getRequest();
+    const user = request.user;
+    
+    return data ? user?.[data] : user;
+  },
+);
+
+// Usage:
+@Get('profile')
+async getProfile(@GetUser() user: User) {
+  return user;
+}
+```
+
+## **Controller Best Practices**
+- Use proper HTTP status codes
+- Implement comprehensive validation
+- Add detailed Swagger documentation
+- Use proper exception handling
+- Implement request/response transformation
+
+```typescript
+// ✅ DO: Comprehensive controller implementation
+@ApiTags('Users')
+@Controller('users')
+@UseInterceptors(LoggingInterceptor)
+export class UserController {
+  constructor(private readonly userService: UserService) {}
+
+  @Post()
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Create a new user' })
+  @ApiResponse({ 
+    status: 201, 
+    description: 'User successfully created',
+    type: UserResponseDto,
+  })
+  @ApiResponse({ 
+    status: 400, 
+    description: 'Invalid user data',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({ 
+    status: 409, 
+    description: 'User already exists',
+    type: ConflictErrorDto,
+  })
+  async createUser(
+    @Body() createUserDto: CreateUserDto,
+  ): Promise<UserResponseDto> {
+    try {
+      const user = await this.userService.create(createUserDto);
+      return UserResponseDto.fromEntity(user);
+    } catch (error) {
+      if (error instanceof ConflictException) {
+        throw new ConflictException('User with this email already exists');
+      }
+      throw new BadRequestException('Failed to create user');
+    }
+  }
+
+  @Get(':id')
+  @ApiOperation({ summary: 'Get user by ID' })
+  @ApiParam({ name: 'id', description: 'User ID', type: 'string' })
+  async getUser(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<UserResponseDto> {
+    const user = await this.userService.findById(id);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    return UserResponseDto.fromEntity(user);
+  }
+
+  @Patch(':id')
+  @UseGuards(AuthGuard, UserOwnershipGuard)
+  @ApiOperation({ summary: 'Update user' })
+  async updateUser(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() updateUserDto: UpdateUserDto,
+    @GetUser() currentUser: User,
+  ): Promise<UserResponseDto> {
+    const user = await this.userService.update(id, updateUserDto);
+    return UserResponseDto.fromEntity(user);
+  }
+}
+```
+
+## **Service Layer Architecture**
+- Implement proper business logic separation
+- Use repository pattern for data access
+- Add comprehensive error handling
+- Implement proper logging and monitoring
+- Use event-driven architecture for side effects
+
+```typescript
+// ✅ DO: Service with proper business logic separation
+@Injectable()
+export class UserService {
+  constructor(
+    private readonly userRepository: UserRepository,
+    private readonly eventEmitter: EventEmitter2,
+    private readonly logger: LoggerService,
+    private readonly hashService: HashService,
+  ) {}
+
+  async create(createUserDto: CreateUserDto): Promise<User> {
+    this.logger.log('Creating new user', { email: createUserDto.email });
+    
+    // Check if user already exists
+    const existingUser = await this.userRepository.findByEmail(createUserDto.email);
+    if (existingUser) {
+      throw new ConflictException('User with this email already exists');
+    }
+
+    // Hash password
+    const hashedPassword = await this.hashService.hash(createUserDto.password);
+
+    // Create user entity
+    const user = this.userRepository.create({
+      ...createUserDto,
+      password: hashedPassword,
+    });
+
+    // Save user
+    const savedUser = await this.userRepository.save(user);
+
+    // Emit event for side effects
+    this.eventEmitter.emit('user.created', {
+      userId: savedUser.id,
+      email: savedUser.email,
+    });
+
+    this.logger.log('User created successfully', { userId: savedUser.id });
+    return savedUser;
+  }
+
+  async findById(id: string): Promise<User | null> {
+    try {
+      return await this.userRepository.findById(id);
+    } catch (error) {
+      this.logger.error('Failed to find user by ID', { id, error });
+      throw new InternalServerErrorException('Failed to retrieve user');
+    }
+  }
+
+  async update(id: string, updateUserDto: UpdateUserDto): Promise<User> {
+    const user = await this.findById(id);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Update only provided fields
+    const updatedUser = await this.userRepository.update(id, updateUserDto);
+
+    this.eventEmitter.emit('user.updated', {
+      userId: id,
+      changes: updateUserDto,
+    });
+
+    return updatedUser;
+  }
+}
+```
+
+## **Data Transfer Objects (DTOs)**
+- Use class-validator for validation
+- Implement proper transformation
+- Create separate DTOs for requests and responses
+- Use inheritance for common properties
+- Add comprehensive Swagger documentation
+
+```typescript
+// ✅ DO: Request DTO with validation
+export class CreateUserDto {
+  @ApiProperty({ example: 'john.doe@example.com' })
+  @IsEmail()
+  @Transform(({ value }) => value.toLowerCase().trim())
+  email: string;
+
+  @ApiProperty({ example: 'johndoe123' })
+  @IsString()
+  @MinLength(3)
+  @MaxLength(30)
+  @Matches(/^[a-zA-Z0-9_]+$/, {
+    message: 'Username can only contain letters, numbers, and underscores',
+  })
+  username: string;
+
+  @ApiProperty({ example: 'SecurePassword123!' })
+  @IsString()
+  @MinLength(8)
+  @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/, {
+    message: 'Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character',
+  })
+  password: string;
+
+  @ApiPropertyOptional({ example: 'John' })
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(50)
+  firstName?: string;
+
+  @ApiPropertyOptional({ example: 'Doe' })
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(50)
+  lastName?: string;
+}
+
+// ✅ DO: Response DTO with transformation
+export class UserResponseDto {
+  @ApiProperty()
+  id: string;
+
+  @ApiProperty()
+  email: string;
+
+  @ApiProperty()
+  username: string;
+
+  @ApiPropertyOptional()
+  firstName?: string;
+
+  @ApiPropertyOptional()
+  lastName?: string;
+
+  @ApiPropertyOptional()
+  avatarUrl?: string;
+
+  @ApiProperty()
+  createdAt: Date;
+
+  @ApiProperty()
+  updatedAt: Date;
+
+  static fromEntity(user: User): UserResponseDto {
+    const dto = new UserResponseDto();
+    dto.id = user.id;
+    dto.email = user.email;
+    dto.username = user.username;
+    dto.firstName = user.firstName;
+    dto.lastName = user.lastName;
+    dto.avatarUrl = user.avatarUrl;
+    dto.createdAt = user.createdAt;
+    dto.updatedAt = user.updatedAt;
+    return dto;
+  }
+}
+
+// ✅ DO: Base DTO for common properties
+export abstract class BaseDto {
+  @ApiProperty()
+  id: string;
+
+  @ApiProperty()
+  createdAt: Date;
+
+  @ApiProperty()
+  updatedAt: Date;
+}
+
+export class UpdateUserDto extends PartialType(
+  OmitType(CreateUserDto, ['email', 'password'] as const)
+) {}
+```
+
+## **Guards & Middleware**
+- Implement proper authentication guards
+- Create role-based authorization guards
+- Use interceptors for cross-cutting concerns
+- Implement rate limiting and throttling
+- Add request logging and monitoring
+
+```typescript
+// ✅ DO: JWT Authentication Guard
+@Injectable()
+export class JwtAuthGuard extends AuthGuard('jwt') {
+  constructor(private readonly reflector: Reflector) {
+    super();
+  }
+
+  canActivate(context: ExecutionContext): boolean | Promise<boolean> {
+    const isPublic = this.reflector.getAllAndOverride<boolean>('isPublic', [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+
+    if (isPublic) {
+      return true;
+    }
+
+    return super.canActivate(context);
+  }
+
+  handleRequest(err: any, user: any, info: any, context: ExecutionContext) {
+    if (err || !user) {
+      throw err || new UnauthorizedException('Access token required');
+    }
+    return user;
+  }
+}
+
+// ✅ DO: Role-based authorization guard
+@Injectable()
+export class RolesGuard implements CanActivate {
+  constructor(private readonly reflector: Reflector) {}
+
+  canActivate(context: ExecutionContext): boolean {
+    const requiredRoles = this.reflector.getAllAndOverride<UserRole[]>('roles', [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+
+    if (!requiredRoles) {
+      return true;
+    }
+
+    const request = context.switchToHttp().getRequest();
+    const user = request.user;
+
+    return requiredRoles.includes(user.role);
+  }
+}
+
+// ✅ DO: Logging interceptor
+@Injectable()
+export class LoggingInterceptor implements NestInterceptor {
+  constructor(private readonly logger: LoggerService) {}
+
+  intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
+    const request = context.switchToHttp().getRequest();
+    const { method, url, headers, body } = request;
+    const userAgent = headers['user-agent'] || '';
+    const ip = headers['x-forwarded-for'] || request.connection.remoteAddress;
+
+    const correlationId = headers['x-correlation-id'] || uuidv4();
+    request.correlationId = correlationId;
+
+    this.logger.log('Incoming request', {
+      method,
+      url,
+      userAgent,
+      ip,
+      correlationId,
+      body: this.sanitizeBody(body),
+    });
+
+    const startTime = Date.now();
+
+    return next.handle().pipe(
+      tap({
+        next: (data) => {
+          const duration = Date.now() - startTime;
+          this.logger.log('Request completed', {
+            method,
+            url,
+            duration,
+            correlationId,
+            responseSize: JSON.stringify(data).length,
+          });
+        },
+        error: (error) => {
+          const duration = Date.now() - startTime;
+          this.logger.error('Request failed', {
+            method,
+            url,
+            duration,
+            correlationId,
+            error: error.message,
+            stack: error.stack,
+          });
+        },
+      }),
+    );
+  }
+
+  private sanitizeBody(body: any): any {
+    if (!body) return body;
+    
+    const sanitized = { ...body };
+    const sensitiveFields = ['password', 'token', 'secret'];
+    
+    sensitiveFields.forEach(field => {
+      if (sanitized[field]) {
+        sanitized[field] = '[REDACTED]';
+      }
+    });
+    
+    return sanitized;
+  }
+}
+```
+
+## **Exception Handling**
+- Create custom exception filters
+- Implement proper error response formatting
+- Add detailed error logging
+- Use specific exception types
+- Implement graceful error recovery
+
+```typescript
+// ✅ DO: Global exception filter
+@Catch()
+export class AllExceptionsFilter implements ExceptionFilter {
+  constructor(private readonly logger: LoggerService) {}
+
+  catch(exception: unknown, host: ArgumentsHost): void {
+    const ctx = host.switchToHttp();
+    const response = ctx.getResponse<Response>();
+    const request = ctx.getRequest<Request>();
+
+    let status: number;
+    let message: string;
+    let errors: any;
+
+    if (exception instanceof HttpException) {
+      status = exception.getStatus();
+      const exceptionResponse = exception.getResponse();
+      
+      if (typeof exceptionResponse === 'object') {
+        message = (exceptionResponse as any).message || exception.message;
+        errors = (exceptionResponse as any).errors;
+      } else {
+        message = exceptionResponse as string;
+      }
+    } else if (exception instanceof Error) {
+      status = HttpStatus.INTERNAL_SERVER_ERROR;
+      message = 'Internal server error';
+      
+      this.logger.error('Unhandled exception', {
+        error: exception.message,
+        stack: exception.stack,
+        path: request.url,
+        method: request.method,
+      });
+    } else {
+      status = HttpStatus.INTERNAL_SERVER_ERROR;
+      message = 'Unknown error occurred';
+    }
+
+    const errorResponse: ErrorResponseDto = {
+      statusCode: status,
+      message,
+      errors,
+      timestamp: new Date().toISOString(),
+      path: request.url,
+      method: request.method,
+      correlationId: (request as any).correlationId,
+    };
+
+    response.status(status).json(errorResponse);
+  }
+}
+
+// ✅ DO: Custom business exceptions
+export class UserNotFoundError extends NotFoundException {
+  constructor(identifier: string) {
+    super(`User with identifier '${identifier}' not found`);
+  }
+}
+
+export class EmailAlreadyExistsError extends ConflictException {
+  constructor(email: string) {
+    super(`User with email '${email}' already exists`);
+  }
+}
+
+export class InvalidCredentialsError extends UnauthorizedException {
+  constructor() {
+    super('Invalid email or password');
+  }
+}
+```
+
+## **Configuration Management**
+- Use strongly typed configuration
+- Implement configuration validation
+- Support multiple environments
+- Use proper secret management
+- Create configuration schemas
+
+```typescript
+// ✅ DO: Strongly typed configuration
+export interface DatabaseConfig {
+  host: string;
+  port: number;
+  username: string;
+  password: string;
+  database: string;
+  ssl: boolean;
+}
+
+export interface AppConfig {
+  port: number;
+  environment: string;
+  apiPrefix: string;
+  cors: {
+    origin: string[];
+    credentials: boolean;
+  };
+  database: DatabaseConfig;
+  jwt: {
+    secret: string;
+    expiresIn: string;
+    refreshSecret: string;
+    refreshExpiresIn: string;
+  };
+  redis: {
+    host: string;
+    port: number;
+    password?: string;
+  };
+}
+
+// ✅ DO: Configuration validation schema
+const configSchema = Joi.object({
+  NODE_ENV: Joi.string()
+    .valid('development', 'staging', 'production')
+    .default('development'),
+  PORT: Joi.number().default(3000),
+  DATABASE_HOST: Joi.string().required(),
+  DATABASE_PORT: Joi.number().default(5432),
+  DATABASE_USERNAME: Joi.string().required(),
+  DATABASE_PASSWORD: Joi.string().required(),
+  DATABASE_NAME: Joi.string().required(),
+  JWT_SECRET: Joi.string().min(32).required(),
+  JWT_EXPIRES_IN: Joi.string().default('15m'),
+  REFRESH_SECRET: Joi.string().min(32).required(),
+  REFRESH_EXPIRES_IN: Joi.string().default('7d'),
+});
+
+@Injectable()
+export class ConfigurationService {
+  constructor(
+    @Inject(CONFIGURATION_TOKEN) private readonly config: AppConfig,
+  ) {}
+
+  get database(): DatabaseConfig {
+    return this.config.database;
+  }
+
+  get jwt() {
+    return this.config.jwt;
+  }
+
+  get port(): number {
+    return this.config.port;
+  }
+}
+
+// ✅ DO: Configuration factory
+export const configurationFactory = (): AppConfig => ({
+  port: parseInt(process.env.PORT, 10) || 3000,
+  environment: process.env.NODE_ENV || 'development',
+  apiPrefix: 'api/v1',
+  cors: {
+    origin: process.env.CORS_ORIGIN?.split(',') || ['http://localhost:3000'],
+    credentials: true,
+  },
+  database: {
+    host: process.env.DATABASE_HOST,
+    port: parseInt(process.env.DATABASE_PORT, 10) || 5432,
+    username: process.env.DATABASE_USERNAME,
+    password: process.env.DATABASE_PASSWORD,
+    database: process.env.DATABASE_NAME,
+    ssl: process.env.NODE_ENV === 'production',
+  },
+  jwt: {
+    secret: process.env.JWT_SECRET,
+    expiresIn: process.env.JWT_EXPIRES_IN || '15m',
+    refreshSecret: process.env.REFRESH_SECRET,
+    refreshExpiresIn: process.env.REFRESH_EXPIRES_IN || '7d',
+  },
+  redis: {
+    host: process.env.REDIS_HOST || 'localhost',
+    port: parseInt(process.env.REDIS_PORT, 10) || 6379,
+    password: process.env.REDIS_PASSWORD,
+  },
+});
+```
+
+## **Testing Best Practices**
+- Write comprehensive unit tests
+- Create integration tests for critical flows
+- Use proper mocking strategies
+- Test error scenarios
+- Implement test data factories
+
+```typescript
+// ✅ DO: Comprehensive service testing
+describe('UserService', () => {
+  let service: UserService;
+  let repository: jest.Mocked<UserRepository>;
+  let eventEmitter: jest.Mocked<EventEmitter2>;
+  let hashService: jest.Mocked<HashService>;
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        UserService,
+        {
+          provide: UserRepository,
+          useValue: createMockRepository(),
+        },
+        {
+          provide: EventEmitter2,
+          useValue: createMockEventEmitter(),
+        },
+        {
+          provide: HashService,
+          useValue: createMockHashService(),
+        },
+        {
+          provide: LoggerService,
+          useValue: createMockLogger(),
+        },
+      ],
+    }).compile();
+
+    service = module.get<UserService>(UserService);
+    repository = module.get(UserRepository);
+    eventEmitter = module.get(EventEmitter2);
+    hashService = module.get(HashService);
+  });
+
+  describe('create', () => {
+    it('should create a new user successfully', async () => {
+      // Arrange
+      const createUserDto = UserFactory.createDto();
+      const hashedPassword = 'hashed_password';
+      const savedUser = UserFactory.create();
+
+      repository.findByEmail.mockResolvedValue(null);
+      hashService.hash.mockResolvedValue(hashedPassword);
+      repository.create.mockReturnValue(savedUser);
+      repository.save.mockResolvedValue(savedUser);
+
+      // Act
+      const result = await service.create(createUserDto);
+
+      // Assert
+      expect(repository.findByEmail).toHaveBeenCalledWith(createUserDto.email);
+      expect(hashService.hash).toHaveBeenCalledWith(createUserDto.password);
+      expect(repository.save).toHaveBeenCalled();
+      expect(eventEmitter.emit).toHaveBeenCalledWith('user.created', {
+        userId: savedUser.id,
+        email: savedUser.email,
+      });
+      expect(result).toEqual(savedUser);
+    });
+
+    it('should throw ConflictException when user already exists', async () => {
+      // Arrange
+      const createUserDto = UserFactory.createDto();
+      const existingUser = UserFactory.create();
+
+      repository.findByEmail.mockResolvedValue(existingUser);
+
+      // Act & Assert
+      await expect(service.create(createUserDto))
+        .rejects
+        .toThrow(ConflictException);
+      
+      expect(hashService.hash).not.toHaveBeenCalled();
+      expect(repository.save).not.toHaveBeenCalled();
+    });
+  });
+});
+
+// ✅ DO: Test factories
+export class UserFactory {
+  static create(overrides: Partial<User> = {}): User {
+    return {
+      id: faker.datatype.uuid(),
+      email: faker.internet.email(),
+      username: faker.internet.userName(),
+      password: faker.internet.password(),
+      firstName: faker.name.firstName(),
+      lastName: faker.name.lastName(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...overrides,
+    };
+  }
+
+  static createDto(overrides: Partial<CreateUserDto> = {}): CreateUserDto {
+    return {
+      email: faker.internet.email(),
+      username: faker.internet.userName(),
+      password: 'SecurePassword123!',
+      firstName: faker.name.firstName(),
+      lastName: faker.name.lastName(),
+      ...overrides,
+    };
+  }
+}
+```
+
+## **Performance Optimization**
+- Implement proper caching strategies
+- Use database query optimization
+- Add request/response compression
+- Implement proper pagination
+- Use connection pooling
+
+```typescript
+// ✅ DO: Caching implementation
+@Injectable()
+export class CachedUserService {
+  constructor(
+    private readonly userService: UserService,
+    private readonly cacheService: CacheService,
+  ) {}
+
+  @CacheKey('user:profile')
+  @CacheTTL(300) // 5 minutes
+  async getUserProfile(userId: string): Promise<UserProfileDto> {
+    const cacheKey = `user:profile:${userId}`;
+    
+    const cached = await this.cacheService.get<UserProfileDto>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    const user = await this.userService.findById(userId);
+    if (!user) {
+      throw new UserNotFoundError(userId);
+    }
+
+    const profile = UserProfileDto.fromEntity(user);
+    await this.cacheService.set(cacheKey, profile, 300);
+    
+    return profile;
+  }
+
+  async invalidateUserCache(userId: string): Promise<void> {
+    const patterns = [
+      `user:profile:${userId}`,
+      `user:settings:${userId}`,
+      `user:notifications:${userId}`,
+    ];
+
+    await Promise.all(
+      patterns.map(pattern => this.cacheService.del(pattern))
+    );
+  }
+}
+
+// ✅ DO: Pagination implementation
+export class PaginationDto {
+  @ApiPropertyOptional({ minimum: 1, default: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number = 1;
+
+  @ApiPropertyOptional({ minimum: 1, maximum: 100, default: 10 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number = 10;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  sortBy?: string;
+
+  @ApiPropertyOptional({ enum: ['ASC', 'DESC'] })
+  @IsOptional()
+  @IsEnum(['ASC', 'DESC'])
+  sortOrder?: 'ASC' | 'DESC' = 'DESC';
+}
+
+export class PaginatedResponseDto<T> {
+  @ApiProperty()
+  data: T[];
+
+  @ApiProperty()
+  meta: {
+    page: number;
+    limit: number;
+    totalItems: number;
+    totalPages: number;
+    hasNextPage: boolean;
+    hasPreviousPage: boolean;
+  };
+}
+```
+
+## **Security Best Practices**
+- Implement proper input validation
+- Use helmet for security headers
+- Add rate limiting and CSRF protection
+- Implement proper CORS configuration
+- Use secure session management
+
+```typescript
+// ✅ DO: Security configuration
+@Injectable()
+export class SecurityService {
+  static getHelmetConfig() {
+    return {
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          scriptSrc: ["'self'"],
+          imgSrc: ["'self'", "data:", "https:"],
+        },
+      },
+      hsts: {
+        maxAge: 31536000,
+        includeSubDomains: true,
+        preload: true,
+      },
+    };
+  }
+
+  static getRateLimitConfig() {
+    return {
+      ttl: 60000, // 1 minute
+      limit: 100, // 100 requests per minute
+      message: 'Too many requests from this IP',
+    };
+  }
+}
+
+// ✅ DO: Input sanitization
+@Injectable()
+export class SanitizationPipe implements PipeTransform {
+  transform(value: any): any {
+    if (typeof value === 'string') {
+      return this.sanitizeString(value);
+    }
+    
+    if (typeof value === 'object' && value !== null) {
+      return this.sanitizeObject(value);
+    }
+    
+    return value;
+  }
+
+  private sanitizeString(value: string): string {
+    return value
+      .trim()
+      .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+      .replace(/javascript:/gi, '')
+      .replace(/on\w+\s*=/gi, '');
+  }
+
+  private sanitizeObject(obj: any): any {
+    const sanitized = {};
+    
+    for (const [key, value] of Object.entries(obj)) {
+      if (typeof value === 'string') {
+        sanitized[key] = this.sanitizeString(value);
+      } else if (typeof value === 'object' && value !== null) {
+        sanitized[key] = this.sanitizeObject(value);
+      } else {
+        sanitized[key] = value;
+      }
+    }
+    
+    return sanitized;
+  }
+}
+```
+description:
+globs:
+alwaysApply: false
+---

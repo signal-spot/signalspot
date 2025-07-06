@@ -1,0 +1,995 @@
+# Domain-Driven Design (DDD) Architecture
+
+## **Domain Layer Structure**
+- Create rich domain models with business logic
+- Implement value objects for primitive obsession
+- Use domain events for side effects
+- Maintain domain invariants and business rules
+- Separate domain logic from infrastructure concerns
+
+```typescript
+// ✅ DO: Rich domain entity with business logic
+export class User extends AggregateRoot {
+  private constructor(
+    private readonly _id: UserId,
+    private _email: Email,
+    private _username: Username,
+    private _profile: UserProfile,
+    private _status: UserStatus,
+    private _createdAt: Date,
+  ) {
+    super();
+  }
+
+  static create(props: {
+    email: string;
+    username: string;
+    password: string;
+    firstName?: string;
+    lastName?: string;
+  }): User {
+    const user = new User(
+      UserId.generate(),
+      Email.create(props.email),
+      Username.create(props.username),
+      UserProfile.create({
+        firstName: props.firstName,
+        lastName: props.lastName,
+        password: props.password,
+      }),
+      UserStatus.PENDING_VERIFICATION,
+      new Date(),
+    );
+
+    user.addDomainEvent(new UserCreatedEvent(user.id, user.email));
+    return user;
+  }
+
+  public verifyEmail(): void {
+    if (this._status === UserStatus.VERIFIED) {
+      throw new DomainError('User is already verified');
+    }
+
+    this._status = UserStatus.VERIFIED;
+    this.addDomainEvent(new UserVerifiedEvent(this._id));
+  }
+
+  public updateProfile(changes: {
+    firstName?: string;
+    lastName?: string;
+    bio?: string;
+  }): void {
+    const updatedProfile = this._profile.update(changes);
+    this._profile = updatedProfile;
+
+    this.addDomainEvent(new UserProfileUpdatedEvent(this._id, changes));
+  }
+
+  public changePassword(currentPassword: string, newPassword: string): void {
+    if (!this._profile.verifyPassword(currentPassword)) {
+      throw new DomainError('Current password is incorrect');
+    }
+
+    this._profile = this._profile.changePassword(newPassword);
+    this.addDomainEvent(new UserPasswordChangedEvent(this._id));
+  }
+
+  // Getters
+  get id(): UserId { return this._id; }
+  get email(): Email { return this._email; }
+  get username(): Username { return this._username; }
+  get profile(): UserProfile { return this._profile; }
+  get status(): UserStatus { return this._status; }
+  get isVerified(): boolean { return this._status === UserStatus.VERIFIED; }
+}
+```
+
+## **Value Objects**
+- Encapsulate primitive values with validation
+- Implement immutability and equality
+- Add business-specific operations
+- Prevent primitive obsession
+- Create self-validating types
+
+```typescript
+// ✅ DO: Value object implementation
+export class Email {
+  private readonly value: string;
+
+  private constructor(email: string) {
+    this.value = email;
+  }
+
+  static create(email: string): Email {
+    if (!email) {
+      throw new DomainError('Email is required');
+    }
+
+    const trimmedEmail = email.trim().toLowerCase();
+    
+    if (!this.isValidFormat(trimmedEmail)) {
+      throw new DomainError('Invalid email format');
+    }
+
+    if (this.isDisposableEmail(trimmedEmail)) {
+      throw new DomainError('Disposable email addresses are not allowed');
+    }
+
+    return new Email(trimmedEmail);
+  }
+
+  public equals(other: Email): boolean {
+    return this.value === other.value;
+  }
+
+  public getDomain(): string {
+    return this.value.split('@')[1];
+  }
+
+  public toString(): string {
+    return this.value;
+  }
+
+  private static isValidFormat(email: string): boolean {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  }
+
+  private static isDisposableEmail(email: string): boolean {
+    const disposableDomains = ['tempmail.org', '10minutemail.com'];
+    const domain = email.split('@')[1];
+    return disposableDomains.includes(domain);
+  }
+}
+
+// ✅ DO: Complex value object
+export class UserProfile {
+  private constructor(
+    private readonly firstName?: string,
+    private readonly lastName?: string,
+    private readonly bio?: string,
+    private readonly hashedPassword?: string,
+    private readonly avatarUrl?: string,
+  ) {}
+
+  static create(props: {
+    firstName?: string;
+    lastName?: string;
+    bio?: string;
+    password: string;
+    avatarUrl?: string;
+  }): UserProfile {
+    const hashedPassword = this.hashPassword(props.password);
+    
+    return new UserProfile(
+      props.firstName?.trim(),
+      props.lastName?.trim(),
+      props.bio?.trim(),
+      hashedPassword,
+      props.avatarUrl,
+    );
+  }
+
+  public update(changes: {
+    firstName?: string;
+    lastName?: string;
+    bio?: string;
+    avatarUrl?: string;
+  }): UserProfile {
+    return new UserProfile(
+      changes.firstName?.trim() ?? this.firstName,
+      changes.lastName?.trim() ?? this.lastName,
+      changes.bio?.trim() ?? this.bio,
+      this.hashedPassword,
+      changes.avatarUrl ?? this.avatarUrl,
+    );
+  }
+
+  public changePassword(newPassword: string): UserProfile {
+    const hashedPassword = UserProfile.hashPassword(newPassword);
+    
+    return new UserProfile(
+      this.firstName,
+      this.lastName,
+      this.bio,
+      hashedPassword,
+      this.avatarUrl,
+    );
+  }
+
+  public verifyPassword(password: string): boolean {
+    return bcrypt.compareSync(password, this.hashedPassword);
+  }
+
+  public getFullName(): string {
+    if (!this.firstName && !this.lastName) {
+      return '';
+    }
+    return [this.firstName, this.lastName].filter(Boolean).join(' ');
+  }
+
+  private static hashPassword(password: string): string {
+    if (password.length < 8) {
+      throw new DomainError('Password must be at least 8 characters long');
+    }
+    return bcrypt.hashSync(password, 12);
+  }
+
+  // Getters
+  get firstName(): string | undefined { return this.firstName; }
+  get lastName(): string | undefined { return this.lastName; }
+  get bio(): string | undefined { return this.bio; }
+  get avatarUrl(): string | undefined { return this.avatarUrl; }
+}
+```
+
+## **Domain Services**
+- Implement complex business logic that doesn't belong to entities
+- Coordinate between multiple aggregates
+- Handle domain-specific operations
+- Maintain stateless behavior
+- Express business concepts clearly
+
+```typescript
+// ✅ DO: Domain service for complex business logic
+export interface IUserDomainService {
+  canUserCreateSignalSpot(user: User, location: Location): Promise<boolean>;
+  calculateUserReputationScore(user: User): Promise<number>;
+  validateUsernameAvailability(username: Username): Promise<boolean>;
+}
+
+@Injectable()
+export class UserDomainService implements IUserDomainService {
+  constructor(
+    private readonly signalSpotRepository: ISignalSpotRepository,
+    private readonly userRepository: IUserRepository,
+    private readonly reputationPolicy: IReputationPolicy,
+  ) {}
+
+  async canUserCreateSignalSpot(user: User, location: Location): Promise<boolean> {
+    // Business rule: User must be verified
+    if (!user.isVerified) {
+      return false;
+    }
+
+    // Business rule: User cannot create more than 3 signal spots per day
+    const todaySpots = await this.signalSpotRepository.countByUserAndDate(
+      user.id,
+      new Date(),
+    );
+
+    if (todaySpots >= 3) {
+      return false;
+    }
+
+    // Business rule: Signal spots must be at least 100m apart
+    const nearbySpots = await this.signalSpotRepository.findNearby(
+      location,
+      100, // meters
+    );
+
+    const userNearbySpots = nearbySpots.filter(spot => 
+      spot.createdBy.equals(user.id)
+    );
+
+    return userNearbySpots.length === 0;
+  }
+
+  async calculateUserReputationScore(user: User): Promise<number> {
+    const userSpots = await this.signalSpotRepository.findByCreator(user.id);
+    const userSparks = await this.sparkRepository.findByUser(user.id);
+
+    return this.reputationPolicy.calculate({
+      spotsCreated: userSpots.length,
+      sparksGenerated: userSparks.length,
+      verificationStatus: user.isVerified,
+      accountAge: this.calculateAccountAge(user.createdAt),
+      reportedCount: user.reportedCount,
+    });
+  }
+
+  async validateUsernameAvailability(username: Username): Promise<boolean> {
+    const existingUser = await this.userRepository.findByUsername(username);
+    return existingUser === null;
+  }
+
+  private calculateAccountAge(createdAt: Date): number {
+    const now = new Date();
+    const diffTime = Math.abs(now.getTime() - createdAt.getTime());
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24)); // days
+  }
+}
+```
+
+## **Repository Pattern**
+- Define domain repository interfaces
+- Implement infrastructure-specific repositories
+- Use aggregates as transaction boundaries
+- Implement proper querying strategies
+- Maintain data consistency
+
+```typescript
+// ✅ DO: Domain repository interface
+export interface IUserRepository {
+  findById(id: UserId): Promise<User | null>;
+  findByEmail(email: Email): Promise<User | null>;
+  findByUsername(username: Username): Promise<User | null>;
+  save(user: User): Promise<void>;
+  remove(user: User): Promise<void>;
+  findActiveUsersNear(location: Location, radiusKm: number): Promise<User[]>;
+  countByStatus(status: UserStatus): Promise<number>;
+}
+
+// ✅ DO: Infrastructure repository implementation
+@Injectable()
+export class MikroOrmUserRepository implements IUserRepository {
+  constructor(
+    private readonly em: EntityManager,
+    private readonly userMapper: UserMapper,
+  ) {}
+
+  async findById(id: UserId): Promise<User | null> {
+    const userEntity = await this.em.findOne(UserEntity, { id: id.toString() });
+    return userEntity ? this.userMapper.toDomain(userEntity) : null;
+  }
+
+  async findByEmail(email: Email): Promise<User | null> {
+    const userEntity = await this.em.findOne(UserEntity, { 
+      email: email.toString() 
+    });
+    return userEntity ? this.userMapper.toDomain(userEntity) : null;
+  }
+
+  async save(user: User): Promise<void> {
+    const userEntity = this.userMapper.toPersistence(user);
+    
+    // Handle new entity vs existing entity
+    if (await this.em.findOne(UserEntity, { id: userEntity.id })) {
+      await this.em.persistAndFlush(userEntity);
+    } else {
+      this.em.persist(userEntity);
+      await this.em.flush();
+    }
+
+    // Publish domain events
+    await this.publishDomainEvents(user);
+  }
+
+  async findActiveUsersNear(
+    location: Location, 
+    radiusKm: number
+  ): Promise<User[]> {
+    const qb = this.em.createQueryBuilder(UserEntity, 'u');
+    
+    const userEntities = await qb
+      .where({
+        status: UserStatus.VERIFIED,
+        lastLoginAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }, // 30 days
+      })
+      .andWhere(
+        `ST_DWithin(
+          ST_SetSRID(ST_MakePoint(u.longitude, u.latitude), 4326),
+          ST_SetSRID(ST_MakePoint(?, ?), 4326),
+          ?
+        )`,
+        [location.longitude, location.latitude, radiusKm * 1000]
+      )
+      .getResultList();
+
+    return userEntities.map(entity => this.userMapper.toDomain(entity));
+  }
+
+  private async publishDomainEvents(aggregate: User): Promise<void> {
+    const events = aggregate.getUncommittedEvents();
+    
+    for (const event of events) {
+      await this.eventBus.publish(event);
+    }
+    
+    aggregate.markEventsAsCommitted();
+  }
+}
+```
+
+## **Domain Events**
+- Model important business events
+- Implement eventual consistency
+- Decouple bounded contexts
+- Handle side effects asynchronously
+- Maintain event sourcing capabilities
+
+```typescript
+// ✅ DO: Domain event implementation
+export abstract class DomainEvent {
+  readonly occurredOn: Date;
+  readonly eventId: string;
+
+  constructor() {
+    this.occurredOn = new Date();
+    this.eventId = uuidv4();
+  }
+}
+
+export class UserCreatedEvent extends DomainEvent {
+  constructor(
+    readonly userId: UserId,
+    readonly email: Email,
+  ) {
+    super();
+  }
+}
+
+export class UserVerifiedEvent extends DomainEvent {
+  constructor(readonly userId: UserId) {
+    super();
+  }
+}
+
+export class SignalSpotCreatedEvent extends DomainEvent {
+  constructor(
+    readonly spotId: SignalSpotId,
+    readonly createdBy: UserId,
+    readonly location: Location,
+    readonly category: SpotCategory,
+  ) {
+    super();
+  }
+}
+
+// ✅ DO: Event handlers for side effects
+@EventHandler(UserCreatedEvent)
+export class UserCreatedEventHandler implements IEventHandler<UserCreatedEvent> {
+  constructor(
+    private readonly emailService: IEmailService,
+    private readonly notificationService: INotificationService,
+    private readonly logger: ILogger,
+  ) {}
+
+  async handle(event: UserCreatedEvent): Promise<void> {
+    try {
+      // Send welcome email
+      await this.emailService.sendWelcomeEmail(event.email.toString());
+
+      // Create default user preferences
+      await this.notificationService.createDefaultPreferences(event.userId);
+
+      // Log user registration for analytics
+      this.logger.info('User created', {
+        userId: event.userId.toString(),
+        email: event.email.toString(),
+        occurredOn: event.occurredOn,
+      });
+    } catch (error) {
+      this.logger.error('Failed to handle UserCreatedEvent', {
+        eventId: event.eventId,
+        userId: event.userId.toString(),
+        error: error.message,
+      });
+      
+      // Could implement retry logic or dead letter queue here
+      throw error;
+    }
+  }
+}
+
+@EventHandler(SignalSpotCreatedEvent)
+export class SignalSpotCreatedEventHandler implements IEventHandler<SignalSpotCreatedEvent> {
+  constructor(
+    private readonly notificationService: INotificationService,
+    private readonly userRepository: IUserRepository,
+    private readonly pushNotificationService: IPushNotificationService,
+  ) {}
+
+  async handle(event: SignalSpotCreatedEvent): Promise<void> {
+    // Notify nearby users about new signal spot
+    const nearbyUsers = await this.userRepository.findActiveUsersNear(
+      event.location,
+      5, // 5km radius
+    );
+
+    const notifications = nearbyUsers.map(user => 
+      this.pushNotificationService.sendNewSpotNotification(
+        user.id,
+        event.spotId,
+        event.location,
+        event.category,
+      )
+    );
+
+    await Promise.allSettled(notifications);
+  }
+}
+```
+
+## **Aggregate Design**
+- Design aggregates around business invariants
+- Keep aggregates small and focused
+- Use eventual consistency between aggregates
+- Implement proper aggregate boundaries
+- Handle concurrency conflicts
+
+```typescript
+// ✅ DO: SignalSpot aggregate with business invariants
+export class SignalSpot extends AggregateRoot {
+  private _sparks: SignalSpark[] = [];
+  private _participants: UserId[] = [];
+
+  private constructor(
+    private readonly _id: SignalSpotId,
+    private readonly _title: string,
+    private readonly _description: string,
+    private readonly _location: Location,
+    private readonly _category: SpotCategory,
+    private readonly _createdBy: UserId,
+    private _status: SpotStatus,
+    private readonly _createdAt: Date,
+    private _expiresAt: Date,
+  ) {
+    super();
+  }
+
+  static create(props: {
+    title: string;
+    description: string;
+    location: Location;
+    category: SpotCategory;
+    createdBy: UserId;
+    duration: number; // hours
+  }): SignalSpot {
+    // Business rule validation
+    if (props.title.length < 3 || props.title.length > 100) {
+      throw new DomainError('Title must be between 3 and 100 characters');
+    }
+
+    if (props.duration < 1 || props.duration > 168) { // max 1 week
+      throw new DomainError('Duration must be between 1 and 168 hours');
+    }
+
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + props.duration);
+
+    const signalSpot = new SignalSpot(
+      SignalSpotId.generate(),
+      props.title,
+      props.description,
+      props.location,
+      props.category,
+      props.createdBy,
+      SpotStatus.ACTIVE,
+      new Date(),
+      expiresAt,
+    );
+
+    signalSpot.addDomainEvent(new SignalSpotCreatedEvent(
+      signalSpot._id,
+      signalSpot._createdBy,
+      signalSpot._location,
+      signalSpot._category,
+    ));
+
+    return signalSpot;
+  }
+
+  public addSpark(userId: UserId, content: string): SignalSpark {
+    // Business rule: Cannot add spark to expired spot
+    if (this.isExpired()) {
+      throw new DomainError('Cannot add spark to expired signal spot');
+    }
+
+    // Business rule: Cannot add spark to inactive spot
+    if (this._status !== SpotStatus.ACTIVE) {
+      throw new DomainError('Cannot add spark to inactive signal spot');
+    }
+
+    // Business rule: Max 50 sparks per spot
+    if (this._sparks.length >= 50) {
+      throw new DomainError('Signal spot has reached maximum spark limit');
+    }
+
+    const spark = SignalSpark.create(this._id, userId, content);
+    this._sparks.push(spark);
+
+    // Add user to participants if not already there
+    if (!this._participants.find(id => id.equals(userId))) {
+      this._participants.push(userId);
+    }
+
+    this.addDomainEvent(new SparkAddedEvent(
+      spark.id,
+      this._id,
+      userId,
+    ));
+
+    return spark;
+  }
+
+  public join(userId: UserId): void {
+    // Business rule: Cannot join expired spot
+    if (this.isExpired()) {
+      throw new DomainError('Cannot join expired signal spot');
+    }
+
+    // Business rule: Cannot join own spot
+    if (this._createdBy.equals(userId)) {
+      throw new DomainError('Cannot join your own signal spot');
+    }
+
+    // Business rule: Max 20 participants
+    if (this._participants.length >= 20) {
+      throw new DomainError('Signal spot has reached maximum participant limit');
+    }
+
+    if (this._participants.find(id => id.equals(userId))) {
+      throw new DomainError('User is already a participant');
+    }
+
+    this._participants.push(userId);
+
+    this.addDomainEvent(new UserJoinedSpotEvent(
+      this._id,
+      userId,
+    ));
+  }
+
+  public deactivate(): void {
+    if (this._status === SpotStatus.INACTIVE) {
+      throw new DomainError('Signal spot is already inactive');
+    }
+
+    this._status = SpotStatus.INACTIVE;
+
+    this.addDomainEvent(new SignalSpotDeactivatedEvent(
+      this._id,
+      this._createdBy,
+    ));
+  }
+
+  private isExpired(): boolean {
+    return new Date() > this._expiresAt;
+  }
+
+  // Getters with business logic
+  get participantCount(): number {
+    return this._participants.length;
+  }
+
+  get sparkCount(): number {
+    return this._sparks.length;
+  }
+
+  get isActive(): boolean {
+    return this._status === SpotStatus.ACTIVE && !this.isExpired();
+  }
+
+  get remainingTime(): number {
+    if (this.isExpired()) return 0;
+    return Math.max(0, this._expiresAt.getTime() - Date.now());
+  }
+}
+```
+
+## **Application Services (Use Cases)**
+- Orchestrate domain operations
+- Handle cross-aggregate transactions
+- Implement application-specific logic
+- Coordinate with infrastructure services
+- Manage transaction boundaries
+
+```typescript
+// ✅ DO: Application service implementation
+export interface CreateSignalSpotCommand {
+  userId: string;
+  title: string;
+  description: string;
+  latitude: number;
+  longitude: number;
+  category: string;
+  duration: number;
+}
+
+export interface CreateSignalSpotResult {
+  spotId: string;
+  expiresAt: Date;
+}
+
+@Injectable()
+export class CreateSignalSpotUseCase {
+  constructor(
+    private readonly userRepository: IUserRepository,
+    private readonly signalSpotRepository: ISignalSpotRepository,
+    private readonly userDomainService: IUserDomainService,
+    private readonly eventBus: IEventBus,
+    private readonly unitOfWork: IUnitOfWork,
+  ) {}
+
+  async execute(command: CreateSignalSpotCommand): Promise<CreateSignalSpotResult> {
+    return await this.unitOfWork.execute(async () => {
+      // 1. Load and validate user
+      const userId = UserId.fromString(command.userId);
+      const user = await this.userRepository.findById(userId);
+      
+      if (!user) {
+        throw new ApplicationError('User not found');
+      }
+
+      // 2. Create value objects
+      const location = Location.create(command.latitude, command.longitude);
+      const category = SpotCategory.fromString(command.category);
+
+      // 3. Check business rules via domain service
+      const canCreate = await this.userDomainService.canUserCreateSignalSpot(
+        user,
+        location,
+      );
+
+      if (!canCreate) {
+        throw new ApplicationError(
+          'User cannot create signal spot at this location and time'
+        );
+      }
+
+      // 4. Create the aggregate
+      const signalSpot = SignalSpot.create({
+        title: command.title,
+        description: command.description,
+        location,
+        category,
+        createdBy: userId,
+        duration: command.duration,
+      });
+
+      // 5. Save the aggregate
+      await this.signalSpotRepository.save(signalSpot);
+
+      // 6. Return result
+      return {
+        spotId: signalSpot.id.toString(),
+        expiresAt: signalSpot.expiresAt,
+      };
+    });
+  }
+}
+
+// ✅ DO: Query service for read operations
+@Injectable()
+export class SignalSpotQueryService {
+  constructor(
+    private readonly queryRepository: ISignalSpotQueryRepository,
+    private readonly locationService: ILocationService,
+  ) {}
+
+  async findNearbySpots(query: {
+    latitude: number;
+    longitude: number;
+    radiusKm: number;
+    category?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<SignalSpotListDto[]> {
+    const location = Location.create(query.latitude, query.longitude);
+    
+    const spots = await this.queryRepository.findNearby({
+      location,
+      radiusKm: query.radiusKm,
+      category: query.category ? SpotCategory.fromString(query.category) : undefined,
+      limit: query.limit ?? 20,
+      offset: query.offset ?? 0,
+      includeExpired: false,
+    });
+
+    return spots.map(spot => ({
+      id: spot.id,
+      title: spot.title,
+      description: spot.description,
+      category: spot.category,
+      location: {
+        latitude: spot.location.latitude,
+        longitude: spot.location.longitude,
+      },
+      participantCount: spot.participantCount,
+      sparkCount: spot.sparkCount,
+      distanceKm: this.locationService.calculateDistance(
+        location,
+        spot.location,
+      ),
+      createdAt: spot.createdAt,
+      expiresAt: spot.expiresAt,
+      remainingTime: spot.remainingTime,
+    }));
+  }
+}
+```
+
+## **Bounded Context Integration**
+- Define clear context boundaries
+- Use anti-corruption layers
+- Implement context mapping strategies
+- Handle cross-context communication
+- Maintain data consistency across contexts
+
+```typescript
+// ✅ DO: Anti-corruption layer for external services
+export interface ExternalUserProfileDto {
+  user_id: string;
+  email_address: string;
+  display_name: string;
+  profile_image_url?: string;
+  is_verified: boolean;
+}
+
+@Injectable()
+export class ExternalUserServiceAdapter {
+  constructor(
+    private readonly externalUserService: IExternalUserService,
+    private readonly logger: ILogger,
+  ) {}
+
+  async getUserProfile(userId: UserId): Promise<UserProfile | null> {
+    try {
+      const externalProfile = await this.externalUserService.getProfile(
+        userId.toString()
+      );
+
+      if (!externalProfile) {
+        return null;
+      }
+
+      // Transform external format to our domain model
+      return this.transformToDomainModel(externalProfile);
+    } catch (error) {
+      this.logger.warn('Failed to fetch external user profile', {
+        userId: userId.toString(),
+        error: error.message,
+      });
+      
+      // Return null instead of throwing to handle gracefully
+      return null;
+    }
+  }
+
+  private transformToDomainModel(dto: ExternalUserProfileDto): UserProfile {
+    // Anti-corruption layer: translate external concepts to our domain
+    return UserProfile.create({
+      firstName: this.extractFirstName(dto.display_name),
+      lastName: this.extractLastName(dto.display_name),
+      avatarUrl: dto.profile_image_url,
+      // Note: we don't set password here as it's external user
+      password: '', // Will be handled differently for external users
+    });
+  }
+
+  private extractFirstName(displayName: string): string {
+    return displayName.split(' ')[0] || '';
+  }
+
+  private extractLastName(displayName: string): string {
+    const parts = displayName.split(' ');
+    return parts.length > 1 ? parts.slice(1).join(' ') : '';
+  }
+}
+
+// ✅ DO: Domain event for cross-context communication
+@EventHandler(UserVerifiedEvent)
+export class SyncUserWithExternalSystemHandler 
+  implements IEventHandler<UserVerifiedEvent> {
+  
+  constructor(
+    private readonly externalUserService: IExternalUserService,
+    private readonly logger: ILogger,
+  ) {}
+
+  async handle(event: UserVerifiedEvent): Promise<void> {
+    try {
+      // Notify external system about user verification
+      await this.externalUserService.markUserAsVerified(
+        event.userId.toString()
+      );
+      
+      this.logger.info('User verification synced with external system', {
+        userId: event.userId.toString(),
+        eventId: event.eventId,
+      });
+    } catch (error) {
+      this.logger.error('Failed to sync user verification with external system', {
+        userId: event.userId.toString(),
+        eventId: event.eventId,
+        error: error.message,
+      });
+
+      // Don't throw - this is eventually consistent
+      // Could implement retry mechanism or compensation action
+    }
+  }
+}
+```
+
+## **Error Handling & Domain Validation**
+- Create specific domain exceptions
+- Implement proper validation strategies
+- Handle business rule violations
+- Provide meaningful error messages
+- Implement error recovery patterns
+
+```typescript
+// ✅ DO: Domain-specific error hierarchy
+export abstract class DomainError extends Error {
+  abstract readonly code: string;
+  
+  constructor(message: string, public readonly details?: any) {
+    super(message);
+    this.name = this.constructor.name;
+  }
+}
+
+export class BusinessRuleViolationError extends DomainError {
+  readonly code = 'BUSINESS_RULE_VIOLATION';
+  
+  constructor(rule: string, details?: any) {
+    super(`Business rule violation: ${rule}`, details);
+  }
+}
+
+export class AggregateNotFoundError extends DomainError {
+  readonly code = 'AGGREGATE_NOT_FOUND';
+  
+  constructor(aggregateType: string, id: string) {
+    super(`${aggregateType} with ID ${id} not found`);
+  }
+}
+
+export class ConcurrencyError extends DomainError {
+  readonly code = 'CONCURRENCY_CONFLICT';
+  
+  constructor(aggregateType: string, id: string, expectedVersion: number, actualVersion: number) {
+    super(
+      `Concurrency conflict for ${aggregateType} ${id}. Expected version ${expectedVersion}, but was ${actualVersion}`
+    );
+  }
+}
+
+// ✅ DO: Domain validation specifications
+export interface ISpecification<T> {
+  isSatisfiedBy(candidate: T): boolean;
+  getFailureReason(): string;
+}
+
+export class UserCanCreateSpotSpecification implements ISpecification<{
+  user: User;
+  todaySpotCount: number;
+  nearbyUserSpots: SignalSpot[];
+}> {
+  
+  isSatisfiedBy(context: {
+    user: User;
+    todaySpotCount: number;
+    nearbyUserSpots: SignalSpot[];
+  }): boolean {
+    if (!context.user.isVerified) {
+      this.failureReason = 'User must be verified to create signal spots';
+      return false;
+    }
+
+    if (context.todaySpotCount >= 3) {
+      this.failureReason = 'User has reached daily limit of 3 signal spots';
+      return false;
+    }
+
+    if (context.nearbyUserSpots.length > 0) {
+      this.failureReason = 'User already has a signal spot within 100 meters';
+      return false;
+    }
+
+    return true;
+  }
+
+  private failureReason: string = '';
+
+  getFailureReason(): string {
+    return this.failureReason;
+  }
+}
+```
+description:
+globs:
+alwaysApply: false
+---

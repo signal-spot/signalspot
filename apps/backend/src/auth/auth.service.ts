@@ -70,13 +70,13 @@ export class AuthService {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 12);
 
-    // Create new user
-    const user = this.em.create(User, {
+    // Create new user using domain factory method
+    const user = User.create({
       email,
       username,
+      password: hashedPassword,
       firstName,
       lastName,
-      password: hashedPassword,
     });
 
     await this.em.persistAndFlush(user);
