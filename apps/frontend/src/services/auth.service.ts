@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { apiService, ApiResponse } from './api.service';
 
 // User type definition
 export interface User {
@@ -7,9 +8,34 @@ export interface User {
   username: string;
   firstName?: string;
   lastName?: string;
+  nickname?: string;
+  bio?: string;
+  interests?: string;
+  avatarUrl?: string;
   isEmailVerified: boolean;
+  isVerified: boolean;
+  isPrivate: boolean;
   createdAt: string;
   lastLoginAt?: string;
+  lastActiveAt?: string;
+  preferences: {
+    notifications: {
+      email: boolean;
+      push: boolean;
+      sms: boolean;
+    };
+    privacy: {
+      showLocation: boolean;
+      showActivity: boolean;
+      allowMessages: boolean;
+      allowFriendRequests: boolean;
+    };
+    appearance: {
+      theme: 'light' | 'dark' | 'auto';
+      language: string;
+      timezone: string;
+    };
+  };
 }
 
 const API_BASE_URL = __DEV__ 
@@ -117,21 +143,13 @@ class AuthService {
 
   // Authentication Methods
   async login(credentials: LoginRequest): Promise<AuthResponse> {
-    const response = await this.apiRequest<AuthResponse>('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify(credentials),
-    });
-
+    const response = await apiService.post<AuthResponse>('/auth/login', credentials, 'login');
     await this.storeAuthData(response);
     return response;
   }
 
   async register(userData: RegisterRequest): Promise<AuthResponse> {
-    const response = await this.apiRequest<AuthResponse>('/auth/register', {
-      method: 'POST',
-      body: JSON.stringify(userData),
-    });
-
+    const response = await apiService.post<AuthResponse>('/auth/register', userData, 'register');
     await this.storeAuthData(response);
     return response;
   }
@@ -139,9 +157,7 @@ class AuthService {
   async logout(): Promise<void> {
     try {
       // Call logout endpoint to invalidate server-side session
-      await this.apiRequest('/auth/logout', {
-        method: 'POST',
-      });
+      await apiService.post('/auth/logout', {}, 'logout');
     } catch (error) {
       // Continue with local logout even if server call fails
       console.warn('Server logout failed:', error);
@@ -151,35 +167,78 @@ class AuthService {
   }
 
   async refreshToken(): Promise<{ accessToken: string } | null> {
-    try {
-      const refreshToken = await this.getRefreshToken();
-      if (!refreshToken) {
-        return null;
-      }
-
-      const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ refreshToken }),
-      });
-
-      if (!response.ok) {
-        return null;
-      }
-
-      const data = await response.json();
-      await this.setAccessToken(data.accessToken);
-      return data;
-    } catch (error) {
-      console.error('Token refresh failed:', error);
-      return null;
-    }
+    return apiService.refreshToken();
   }
 
   async getProfile(): Promise<User> {
-    return this.apiRequest<User>('/auth/profile');
+    const response = await apiService.get<ApiResponse<User>>('/auth/profile', {}, 'profile');
+    return response.data;
+  }
+
+  // Email verification
+  async resendVerificationEmail(): Promise<{ message: string }> {
+    const response = await apiService.post<ApiResponse<{ message: string }>>(
+      '/auth/resend-verification',
+      {},
+      'resendVerification'
+    );
+    return response.data;
+  }
+
+  async verifyEmail(token: string): Promise<{ message: string }> {
+    const response = await apiService.post<ApiResponse<{ message: string }>>(
+      '/auth/verify-email',
+      { token },
+      'verifyEmail'
+    );
+    return response.data;
+  }
+
+  // Password reset
+  async requestPasswordReset(email: string): Promise<{ message: string }> {
+    const response = await apiService.post<ApiResponse<{ message: string }>>(
+      '/auth/forgot-password',
+      { email },
+      'forgotPassword'
+    );
+    return response.data;
+  }
+
+  async resetPassword(token: string, newPassword: string): Promise<{ message: string }> {
+    const response = await apiService.post<ApiResponse<{ message: string }>>(
+      '/auth/reset-password',
+      { token, newPassword },
+      'resetPassword'
+    );
+    return response.data;
+  }
+
+  // Two-factor authentication
+  async enableTwoFactor(): Promise<{ qrCode: string; secret: string }> {
+    const response = await apiService.post<ApiResponse<{ qrCode: string; secret: string }>>(
+      '/auth/2fa/enable',
+      {},
+      'enable2FA'
+    );
+    return response.data;
+  }
+
+  async verifyTwoFactor(token: string): Promise<{ message: string }> {
+    const response = await apiService.post<ApiResponse<{ message: string }>>(
+      '/auth/2fa/verify',
+      { token },
+      'verify2FA'
+    );
+    return response.data;
+  }
+
+  async disableTwoFactor(token: string): Promise<{ message: string }> {
+    const response = await apiService.post<ApiResponse<{ message: string }>>(
+      '/auth/2fa/disable',
+      { token },
+      'disable2FA'
+    );
+    return response.data;
   }
 
   // Token Management

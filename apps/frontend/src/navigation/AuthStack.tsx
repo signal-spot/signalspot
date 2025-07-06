@@ -12,4 +12,7 @@ export const AuthStack: React.FC = () => {
       <Stack.Screen name="Register" component={RegisterScreen} />
     </Stack.Navigator>
   );
-}; 
+};
+
+// Export with alternative name for compatibility
+export const AuthStackNavigator = AuthStack; 

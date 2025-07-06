@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,11 +7,14 @@ import {
   Alert,
   Platform,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import MapView, { Marker, Circle, Region } from 'react-native-maps';
 import { useFocusEffect } from '@react-navigation/native';
 import { useLocation } from '../../hooks/useLocation';
 import { useAuth } from '../../providers/AuthProvider';
+import { signalSpotService, SignalSpot, CreateSpotRequest } from '../../services/signalSpot.service';
+import { useLoadingState } from '../../services/api.service';
 import styled from 'styled-components/native';
 
 const { width, height } = Dimensions.get('window');
@@ -139,21 +142,72 @@ const ButtonText = styled.Text<{ variant?: 'primary' | 'secondary' }>`
   color: ${props => props.variant === 'primary' ? '#ffffff' : '#333333'};
 `;
 
-interface SignalSpot {
-  id: string;
-  latitude: number;
-  longitude: number;
-  content: string;
-  createdAt: string;
-  isActive: boolean;
-}
+const SpotTypeSelector = styled.View`
+  flex-direction: row;
+  justify-content: space-around;
+  margin-bottom: 15px;
+`;
+
+const SpotTypeButton = styled.TouchableOpacity<{ selected: boolean }>`
+  padding: 8px 12px;
+  border-radius: 15px;
+  background-color: ${props => props.selected ? '#ff6b6b' : '#f0f0f0'};
+`;
+
+const SpotTypeText = styled.Text<{ selected: boolean }>`
+  font-size: 12px;
+  color: ${props => props.selected ? '#ffffff' : '#666666'};
+  font-weight: ${props => props.selected ? 'bold' : 'normal'};
+`;
+
+const LoadingOverlay = styled.View`
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.3);
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+`;
+
+const LoadingText = styled.Text`
+  color: white;
+  margin-top: 10px;
+  font-size: 16px;
+`;
+
+const SpotCounter = styled.View`
+  position: absolute;
+  top: 120px;
+  right: 20px;
+  background-color: rgba(255, 255, 255, 0.9);
+  padding: 8px 12px;
+  border-radius: 15px;
+`;
+
+const SpotCounterText = styled.Text`
+  font-size: 12px;
+  color: #333;
+  font-weight: bold;
+`;
 
 const MapScreen: React.FC = () => {
   const { location, getCurrentLocation, requestLocationPermission } = useLocation();
   const { user } = useAuth();
+  
+  // Loading states
+  const isLoadingNearby = useLoadingState('nearbySpots');
+  const isLoadingCreate = useLoadingState('createSpot');
+  
+  // State
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [spotTitle, setSpotTitle] = useState('');
   const [spotContent, setSpotContent] = useState('');
+  const [spotType, setSpotType] = useState<'social' | 'help' | 'event' | 'info' | 'alert'>('social');
   const [spots, setSpots] = useState<SignalSpot[]>([]);
+  const [selectedSpot, setSelectedSpot] = useState<SignalSpot | null>(null);
   const [mapRegion, setMapRegion] = useState<Region>({
     latitude: 37.5665,
     longitude: 126.9780,
@@ -161,12 +215,49 @@ const MapScreen: React.FC = () => {
     longitudeDelta: 0.0421,
   });
 
-  // Focus effect to refresh location when screen is focused
+  const spotTypes = [
+    { key: 'social', label: '💬', name: 'Social' },
+    { key: 'help', label: '🆘', name: 'Help' },
+    { key: 'event', label: '🎉', name: 'Event' },
+    { key: 'info', label: 'ℹ️', name: 'Info' },
+    { key: 'alert', label: '⚠️', name: 'Alert' },
+  ] as const;
+
+  // Load nearby spots
+  const loadNearbySpots = useCallback(async () => {
+    if (!location) return;
+
+    try {
+      const response = await signalSpotService.getNearbySpots({
+        latitude: location.latitude,
+        longitude: location.longitude,
+        radiusKm: 2,
+        limit: 50,
+        includeExpired: false,
+      });
+
+      if (response.success) {
+        setSpots(response.data);
+      }
+    } catch (error) {
+      console.error('Error loading nearby spots:', error);
+      Alert.alert('오류', '근처 시그널 스팟을 불러오는데 실패했습니다.');
+    }
+  }, [location]);
+
+  // Focus effect to refresh location and spots when screen is focused
   useFocusEffect(
-    React.useCallback(() => {
+    useCallback(() => {
       handleGetCurrentLocation();
     }, [])
   );
+
+  // Load spots when location changes
+  useEffect(() => {
+    if (location) {
+      loadNearbySpots();
+    }
+  }, [location, loadNearbySpots]);
 
   const handleGetCurrentLocation = async () => {
     try {
@@ -186,6 +277,11 @@ const MapScreen: React.FC = () => {
   };
 
   const handleCreateSpot = async () => {
+    if (!spotTitle.trim()) {
+      Alert.alert('알림', '시그널 제목을 입력해주세요.');
+      return;
+    }
+
     if (!spotContent.trim()) {
       Alert.alert('알림', '시그널 메시지를 입력해주세요.');
       return;
@@ -197,41 +293,95 @@ const MapScreen: React.FC = () => {
     }
 
     try {
-      // TODO: Implement API call to create signal spot
-      const newSpot: SignalSpot = {
-        id: Date.now().toString(),
+      const spotData: CreateSpotRequest = {
         latitude: location.latitude,
         longitude: location.longitude,
+        title: spotTitle,
         content: spotContent,
-        createdAt: new Date().toISOString(),
-        isActive: true,
+        type: spotType,
+        visibility: 'public',
+        radius: 100,
+        maxDuration: 24,
       };
 
-      setSpots(prev => [...prev, newSpot]);
-      setSpotContent('');
-      setShowCreateModal(false);
-      
-      Alert.alert('성공', '시그널 스팟이 생성되었습니다!');
-    } catch (error) {
+      const validationErrors = signalSpotService.validateSpotData(spotData);
+      if (validationErrors.length > 0) {
+        Alert.alert('입력 오류', validationErrors.join('\n'));
+        return;
+      }
+
+      const response = await signalSpotService.createSpot(spotData);
+
+      if (response.success) {
+        setSpots(prev => [...prev, response.data]);
+        setSpotTitle('');
+        setSpotContent('');
+        setSpotType('social');
+        setShowCreateModal(false);
+        
+        Alert.alert('성공', '시그널 스팟이 생성되었습니다!');
+      }
+    } catch (error: any) {
       console.error('Error creating spot:', error);
-      Alert.alert('오류', '시그널 스팟 생성에 실패했습니다.');
+      Alert.alert('오류', error.message || '시그널 스팟 생성에 실패했습니다.');
     }
   };
 
   const handleSpotPress = (spot: SignalSpot) => {
+    setSelectedSpot(spot);
+    
+    const distance = signalSpotService.getSpotDistance(spot, location?.latitude || 0, location?.longitude || 0);
+    const formattedDistance = signalSpotService.formatSpotDistance(distance);
+    
     Alert.alert(
-      '시그널 스팟',
-      spot.content,
+      `${signalSpotService.getSpotTypeIcon(spot.type)} ${spot.title}`,
+      `${spot.content}\n\n거리: ${formattedDistance}\n생성자: ${spot.creatorUsername}\n좋아요: ${spot.likeCount} | 댓글: ${spot.replyCount}`,
       [
         { text: '닫기', style: 'cancel' },
-        { text: '나일지도?', onPress: () => handleSpotInteraction(spot) }
+        { text: '상세보기', onPress: () => handleViewSpotDetails(spot) },
+        { text: '❤️ 좋아요', onPress: () => handleSpotInteraction(spot, 'like') }
       ]
     );
   };
 
-  const handleSpotInteraction = (spot: SignalSpot) => {
-    // TODO: Implement spot interaction logic
-    Alert.alert('시그널 스팟', '상호작용 기능이 곧 구현됩니다!');
+  const handleViewSpotDetails = async (spot: SignalSpot) => {
+    try {
+      const response = await signalSpotService.getSpotById(spot.id);
+      if (response.success) {
+        // TODO: Navigate to spot details screen
+        Alert.alert('상세 정보', `스팟 ID: ${spot.id}\n활성 상태: ${response.data.isActive ? '활성' : '비활성'}`);
+      }
+    } catch (error: any) {
+      Alert.alert('오류', '상세 정보를 불러올 수 없습니다.');
+    }
+  };
+
+  const handleSpotInteraction = async (spot: SignalSpot, type: 'like' | 'dislike' | 'share' | 'report') => {
+    try {
+      const response = await signalSpotService.interactWithSpot(spot.id, { type });
+      
+      if (response.success) {
+        // Update the spot in the list
+        setSpots(prev => 
+          prev.map(s => s.id === spot.id ? response.data : s)
+        );
+        
+        switch (type) {
+          case 'like':
+            Alert.alert('성공', '좋아요를 눌렀습니다!');
+            break;
+          case 'share':
+            Alert.alert('성공', '시그널 스팟을 공유했습니다!');
+            break;
+          case 'report':
+            Alert.alert('성공', '신고가 접수되었습니다.');
+            break;
+        }
+      }
+    } catch (error: any) {
+      console.error('Error interacting with spot:', error);
+      Alert.alert('오류', error.message || '상호작용에 실패했습니다.');
+    }
   };
 
   if (!location) {
@@ -270,6 +420,7 @@ const MapScreen: React.FC = () => {
           showsBuildings={false}
           showsTraffic={false}
           showsIndoors={false}
+          onPress={() => setSelectedSpot(null)}
         >
           {/* User's current location circle */}
           <Circle
@@ -284,23 +435,42 @@ const MapScreen: React.FC = () => {
           />
 
           {/* Signal spots */}
-          {spots.map((spot) => (
-            <Marker
-              key={spot.id}
-              coordinate={{
-                latitude: spot.latitude,
-                longitude: spot.longitude,
-              }}
-              title="시그널 스팟"
-              description={spot.content}
-              onPress={() => handleSpotPress(spot)}
-            >
-              <View style={styles.spotMarker}>
-                <Text style={styles.spotMarkerText}>💌</Text>
-              </View>
-            </Marker>
-          ))}
+          {spots.map((spot) => {
+            const isSelected = selectedSpot?.id === spot.id;
+            const typeIcon = signalSpotService.getSpotTypeIcon(spot.type);
+            const typeColor = signalSpotService.getSpotTypeColor(spot.type);
+            
+            return (
+              <Marker
+                key={spot.id}
+                coordinate={{
+                  latitude: spot.latitude,
+                  longitude: spot.longitude,
+                }}
+                title={`${typeIcon} ${spot.title}`}
+                description={spot.content}
+                onPress={() => handleSpotPress(spot)}
+              >
+                <View style={[
+                  styles.spotMarker,
+                  { 
+                    backgroundColor: typeColor,
+                    borderColor: isSelected ? '#ffffff' : typeColor,
+                    borderWidth: isSelected ? 3 : 2,
+                    transform: [{ scale: isSelected ? 1.2 : 1 }],
+                  }
+                ]}>
+                  <Text style={styles.spotMarkerText}>{typeIcon}</Text>
+                </View>
+              </Marker>
+            );
+          })}
         </MapView>
+
+        {/* Spot Counter */}
+        <SpotCounter>
+          <SpotCounterText>{spots.length}개 스팟</SpotCounterText>
+        </SpotCounter>
 
         {/* My Location Button */}
         <MyLocationButton onPress={handleGetCurrentLocation}>
@@ -311,25 +481,73 @@ const MapScreen: React.FC = () => {
         <FloatingButton onPress={() => setShowCreateModal(true)}>
           <Text style={styles.createButtonText}>+</Text>
         </FloatingButton>
+
+        {/* Loading overlay */}
+        {(isLoadingNearby || isLoadingCreate) && (
+          <LoadingOverlay>
+            <ActivityIndicator size="large" color="#ffffff" />
+            <LoadingText>
+              {isLoadingCreate ? '시그널 스팟 생성 중...' : '근처 스팟 로드 중...'}
+            </LoadingText>
+          </LoadingOverlay>
+        )}
       </MapContainer>
 
       {/* Create Spot Modal */}
       {showCreateModal && (
         <CreateSpotModal>
           <ModalTitle>새로운 시그널 스팟 만들기</ModalTitle>
+          
+          <SpotTypeSelector>
+            {spotTypes.map((type) => (
+              <SpotTypeButton
+                key={type.key}
+                selected={spotType === type.key}
+                onPress={() => setSpotType(type.key as typeof spotType)}
+              >
+                <SpotTypeText selected={spotType === type.key}>
+                  {type.label}
+                </SpotTypeText>
+              </SpotTypeButton>
+            ))}
+          </SpotTypeSelector>
+
+          <TextInput
+            placeholder="시그널 제목"
+            value={spotTitle}
+            onChangeText={setSpotTitle}
+            maxLength={100}
+            style={{ marginBottom: 10 }}
+          />
+          
           <TextInput
             placeholder="어떤 시그널을 남기고 싶나요?"
             value={spotContent}
             onChangeText={setSpotContent}
             multiline
-            maxLength={200}
+            maxLength={500}
           />
+          
           <ButtonRow>
-            <Button variant="secondary" onPress={() => setShowCreateModal(false)}>
+            <Button 
+              variant="secondary" 
+              onPress={() => {
+                setShowCreateModal(false);
+                setSpotTitle('');
+                setSpotContent('');
+                setSpotType('social');
+              }}
+            >
               <ButtonText variant="secondary">취소</ButtonText>
             </Button>
-            <Button variant="primary" onPress={handleCreateSpot}>
-              <ButtonText variant="primary">만들기</ButtonText>
+            <Button 
+              variant="primary" 
+              onPress={handleCreateSpot}
+              disabled={isLoadingCreate}
+            >
+              <ButtonText variant="primary">
+                {isLoadingCreate ? '생성 중...' : '만들기'}
+              </ButtonText>
             </Button>
           </ButtonRow>
         </CreateSpotModal>

@@ -1,503 +1,573 @@
-import { Platform, Alert } from 'react-native';
-import Geolocation from 'react-native-geolocation-service';
-import { 
-  request, 
-  PERMISSIONS, 
-  RESULTS, 
-  Permission,
-  check,
-  requestMultiple 
-} from 'react-native-permissions';
+import { apiService, ApiResponse } from './api.service';
 
-export interface LocationCoordinates {
+// Location permission status
+export enum LocationPermissionStatus {
+  GRANTED = 'granted',
+  DENIED = 'denied',
+  RESTRICTED = 'restricted',
+  UNDETERMINED = 'undetermined',
+}
+
+// Location interfaces
+export interface LocationData {
   latitude: number;
   longitude: number;
   altitude?: number;
   accuracy?: number;
+  altitudeAccuracy?: number;
   heading?: number;
   speed?: number;
-}
-
-export interface LocationOptions {
-  enableHighAccuracy?: boolean;
-  timeout?: number;
-  maximumAge?: number;
-  distanceFilter?: number;
-  interval?: number;
-  fastestInterval?: number;
-  showLocationDialog?: boolean;
-  forceRequestLocation?: boolean;
-}
-
-export interface LocationError {
-  code: number;
-  message: string;
+  timestamp: number;
 }
 
 export interface LocationUpdate {
-  coordinates: LocationCoordinates;
-  timestamp: number;
-  mocked?: boolean;
+  userId: string;
+  location: LocationData;
+  isSharing: boolean;
+  lastUpdated: string;
 }
 
-export enum LocationPermissionStatus {
-  GRANTED = 'granted',
-  DENIED = 'denied',
-  BLOCKED = 'blocked',
-  UNAVAILABLE = 'unavailable',
-  LIMITED = 'limited',
+export interface LocationSharingSettings {
+  isEnabled: boolean;
+  shareWithFriends: boolean;
+  shareWithPublic: boolean;
+  shareWithNearby: boolean;
+  precision: 'exact' | 'approximate' | 'city';
+  autoStop: boolean;
+  autoStopAfterMinutes?: number;
+  geofences: Geofence[];
 }
 
-export enum LocationAccuracy {
-  HIGH = 'high',
-  MEDIUM = 'medium',
-  LOW = 'low',
+export interface Geofence {
+  id: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+  radius: number;
+  isActive: boolean;
+  notifications: {
+    onEnter: boolean;
+    onExit: boolean;
+    onDwell: boolean;
+    dwellTime?: number;
+  };
+  actions: {
+    autoShareLocation: boolean;
+    autoCreateSpot: boolean;
+    autoNotifyContacts: boolean;
+  };
+  createdAt: string;
+  updatedAt: string;
 }
 
-export enum LocationSource {
-  GPS = 'gps',
-  NETWORK = 'network',
-  PASSIVE = 'passive',
+export interface NearbyUser {
+  id: string;
+  username: string;
+  nickname?: string;
+  avatarUrl?: string;
+  distance: number;
+  lastSeen: string;
+  isOnline: boolean;
+  location: {
+    latitude: number;
+    longitude: number;
+    accuracy: number;
+  };
+  sharedAt: string;
+  mutualConnections: number;
+  isFollowing: boolean;
+  isFollowedBy: boolean;
+}
+
+export interface LocationHistory {
+  id: string;
+  location: LocationData;
+  address?: {
+    street?: string;
+    city?: string;
+    state?: string;
+    country?: string;
+    postalCode?: string;
+  };
+  visitDuration?: number;
+  activityType?: 'stationary' | 'walking' | 'running' | 'cycling' | 'driving';
+  createdAt: string;
+}
+
+export interface LocationPermissions {
+  granted: boolean;
+  denied: boolean;
+  restricted: boolean;
+  canRequestAgain: boolean;
+  backgroundPermission: boolean;
+  precisaacuracyPermission: boolean;
+}
+
+export interface LocationStats {
+  totalLocationsShared: number;
+  totalTimeSharing: number; // in minutes
+  averageAccuracy: number;
+  mostVisitedPlaces: Array<{
+    address: string;
+    visitCount: number;
+    totalDuration: number;
+  }>;
+  distanceTraveled: number; // in km
+  nearbyUsersMetCount: number;
+  spotsCreatedFromLocation: number;
+}
+
+export interface LocationSuggestion {
+  id: string;
+  name: string;
+  type: 'restaurant' | 'cafe' | 'park' | 'shopping' | 'entertainment' | 'transport' | 'other';
+  latitude: number;
+  longitude: number;
+  distance: number;
+  rating?: number;
+  description?: string;
+  tags: string[];
+  popularity: number;
+  relevanceScore: number;
+}
+
+export interface EmergencyContact {
+  id: string;
+  name: string;
+  phoneNumber: string;
+  email?: string;
+  relationship: string;
+  priority: number;
+  isActive: boolean;
+  canReceiveLocation: boolean;
+  notificationMethods: ('sms' | 'email' | 'app')[];
+}
+
+export interface EmergencySettings {
+  isEnabled: boolean;
+  contacts: EmergencyContact[];
+  autoTrigger: {
+    enabled: boolean;
+    inactivityMinutes: number;
+    lowBatteryPercent: number;
+    panicButtonEnabled: boolean;
+  };
+  locationSharing: {
+    enabled: boolean;
+    duration: number; // minutes
+    updateInterval: number; // seconds
+  };
+}
+
+export interface SafeZone {
+  id: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+  radius: number;
+  isActive: boolean;
+  notifications: {
+    onEnter: boolean;
+    onExit: boolean;
+  };
+  contacts: string[]; // contact IDs
+  createdAt: string;
+  updatedAt: string;
 }
 
 class LocationService {
-  private watchId: number | null = null;
-  private currentLocation: LocationCoordinates | null = null;
-  private lastLocationUpdate: number = 0;
-  private locationUpdateCallbacks: Array<(location: LocationUpdate) => void> = [];
-  private locationErrorCallbacks: Array<(error: LocationError) => void> = [];
-  private permissionStatusCallbacks: Array<(status: LocationPermissionStatus) => void> = [];
+  private readonly baseEndpoint = '/location';
 
-  /**
-   * Initialize location service
-   */
-  async initialize(): Promise<void> {
-    try {
-      const permissionStatus = await this.checkLocationPermission();
-      this.notifyPermissionStatusCallbacks(permissionStatus);
-      
-      if (permissionStatus === LocationPermissionStatus.GRANTED) {
-        await this.getCurrentLocation();
-      }
-    } catch (error) {
-      console.error('Failed to initialize location service:', error);
-    }
+  // Get current location sharing settings
+  async getLocationSettings(): Promise<ApiResponse<LocationSharingSettings>> {
+    return apiService.get<ApiResponse<LocationSharingSettings>>(
+      `${this.baseEndpoint}/settings`,
+      {},
+      'locationSettings'
+    );
   }
 
-  /**
-   * Check location permission status
-   */
-  async checkLocationPermission(): Promise<LocationPermissionStatus> {
-    try {
-      const permission = this.getLocationPermission();
-      const result = await check(permission);
-      
-      switch (result) {
-        case RESULTS.GRANTED:
-          return LocationPermissionStatus.GRANTED;
-        case RESULTS.DENIED:
-          return LocationPermissionStatus.DENIED;
-        case RESULTS.BLOCKED:
-          return LocationPermissionStatus.BLOCKED;
-        case RESULTS.UNAVAILABLE:
-          return LocationPermissionStatus.UNAVAILABLE;
-        case RESULTS.LIMITED:
-          return LocationPermissionStatus.LIMITED;
-        default:
-          return LocationPermissionStatus.UNAVAILABLE;
-      }
-    } catch (error) {
-      console.error('Error checking location permission:', error);
-      return LocationPermissionStatus.UNAVAILABLE;
-    }
+  // Update location sharing settings
+  async updateLocationSettings(settings: Partial<LocationSharingSettings>): Promise<ApiResponse<LocationSharingSettings>> {
+    return apiService.put<ApiResponse<LocationSharingSettings>>(
+      `${this.baseEndpoint}/settings`,
+      settings,
+      'updateLocationSettings'
+    );
   }
 
-  /**
-   * Request location permission
-   */
-  async requestLocationPermission(): Promise<LocationPermissionStatus> {
-    try {
-      const permission = this.getLocationPermission();
-      const result = await request(permission);
-      
-      let status: LocationPermissionStatus;
-      switch (result) {
-        case RESULTS.GRANTED:
-          status = LocationPermissionStatus.GRANTED;
-          break;
-        case RESULTS.DENIED:
-          status = LocationPermissionStatus.DENIED;
-          break;
-        case RESULTS.BLOCKED:
-          status = LocationPermissionStatus.BLOCKED;
-          break;
-        case RESULTS.UNAVAILABLE:
-          status = LocationPermissionStatus.UNAVAILABLE;
-          break;
-        case RESULTS.LIMITED:
-          status = LocationPermissionStatus.LIMITED;
-          break;
-        default:
-          status = LocationPermissionStatus.UNAVAILABLE;
-      }
-
-      this.notifyPermissionStatusCallbacks(status);
-      return status;
-    } catch (error) {
-      console.error('Error requesting location permission:', error);
-      return LocationPermissionStatus.UNAVAILABLE;
-    }
+  // Share current location
+  async shareLocation(location: LocationData): Promise<ApiResponse<{ message: string }>> {
+    return apiService.post<ApiResponse<{ message: string }>>(
+      `${this.baseEndpoint}/share`,
+      { location },
+      'shareLocation'
+    );
   }
 
-  /**
-   * Request multiple location permissions (foreground and background)
-   */
-  async requestAllLocationPermissions(): Promise<{
-    foreground: LocationPermissionStatus;
-    background?: LocationPermissionStatus;
-  }> {
-    try {
-      const permissions: Permission[] = [this.getLocationPermission()];
-      
-      // Add background location permission for Android
-      if (Platform.OS === 'android') {
-        permissions.push(PERMISSIONS.ANDROID.ACCESS_BACKGROUND_LOCATION);
-      }
-
-      const results = await requestMultiple(permissions);
-      
-      const foregroundPermission = this.getLocationPermission();
-      const foregroundStatus = this.convertPermissionResult(results[foregroundPermission]);
-      
-      let backgroundStatus: LocationPermissionStatus | undefined;
-      if (Platform.OS === 'android') {
-        backgroundStatus = this.convertPermissionResult(results[PERMISSIONS.ANDROID.ACCESS_BACKGROUND_LOCATION]);
-      }
-
-      this.notifyPermissionStatusCallbacks(foregroundStatus);
-      
-      return {
-        foreground: foregroundStatus,
-        background: backgroundStatus,
-      };
-    } catch (error) {
-      console.error('Error requesting all location permissions:', error);
-      return {
-        foreground: LocationPermissionStatus.UNAVAILABLE,
-        background: LocationPermissionStatus.UNAVAILABLE,
-      };
-    }
+  // Stop sharing location
+  async stopSharingLocation(): Promise<ApiResponse<{ message: string }>> {
+    return apiService.post<ApiResponse<{ message: string }>>(
+      `${this.baseEndpoint}/stop-sharing`,
+      {},
+      'stopSharing'
+    );
   }
 
-  /**
-   * Get current location
-   */
-  async getCurrentLocation(options?: LocationOptions): Promise<LocationCoordinates> {
-    return new Promise((resolve, reject) => {
-      const defaultOptions: LocationOptions = {
-        enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 10000,
-        ...options,
-      };
-
-      Geolocation.getCurrentPosition(
-        (position) => {
-          const coordinates: LocationCoordinates = {
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-            altitude: position.coords.altitude || undefined,
-            accuracy: position.coords.accuracy,
-            heading: position.coords.heading || undefined,
-            speed: position.coords.speed || undefined,
-          };
-
-          this.currentLocation = coordinates;
-          this.lastLocationUpdate = Date.now();
-          
-          const locationUpdate: LocationUpdate = {
-            coordinates,
-            timestamp: position.timestamp,
-            mocked: position.mocked,
-          };
-
-          this.notifyLocationUpdateCallbacks(locationUpdate);
-          resolve(coordinates);
-        },
-        (error) => {
-          const locationError: LocationError = {
-            code: error.code,
-            message: error.message,
-          };
-          
-          this.notifyLocationErrorCallbacks(locationError);
-          reject(locationError);
-        },
-        defaultOptions
-      );
-    });
+  // Get nearby users
+  async getNearbyUsers(
+    latitude: number,
+    longitude: number,
+    radiusKm: number = 1,
+    limit: number = 50
+  ): Promise<ApiResponse<NearbyUser[]>> {
+    return apiService.get<ApiResponse<NearbyUser[]>>(
+      `${this.baseEndpoint}/nearby-users`,
+      { latitude, longitude, radiusKm, limit },
+      'nearbyUsers'
+    );
   }
 
-  /**
-   * Start watching location changes
-   */
-  startLocationTracking(options?: LocationOptions): boolean {
-    if (this.watchId !== null) {
-      this.stopLocationTracking();
-    }
+  // Get location history
+  async getLocationHistory(
+    startDate?: string,
+    endDate?: string,
+    limit: number = 100,
+    offset: number = 0
+  ): Promise<ApiResponse<LocationHistory[]>> {
+    const params: any = { limit, offset };
+    if (startDate) params.startDate = startDate;
+    if (endDate) params.endDate = endDate;
 
-    const defaultOptions: LocationOptions = {
-      enableHighAccuracy: true,
-      distanceFilter: 10, // meters
-      interval: 5000, // 5 seconds
-      fastestInterval: 2000, // 2 seconds
-      ...options,
+    return apiService.get<ApiResponse<LocationHistory[]>>(
+      `${this.baseEndpoint}/history`,
+      params,
+      'locationHistory'
+    );
+  }
+
+  // Delete location history
+  async deleteLocationHistory(
+    startDate?: string,
+    endDate?: string
+  ): Promise<ApiResponse<{ message: string }>> {
+    const params: any = {};
+    if (startDate) params.startDate = startDate;
+    if (endDate) params.endDate = endDate;
+
+    return apiService.delete<ApiResponse<{ message: string }>>(
+      `${this.baseEndpoint}/history`,
+      'deleteLocationHistory'
+    );
+  }
+
+  // Get location statistics
+  async getLocationStats(): Promise<ApiResponse<LocationStats>> {
+    return apiService.get<ApiResponse<LocationStats>>(
+      `${this.baseEndpoint}/stats`,
+      {},
+      'locationStats'
+    );
+  }
+
+  // Geofence management
+  async createGeofence(geofence: Omit<Geofence, 'id' | 'createdAt' | 'updatedAt'>): Promise<ApiResponse<Geofence>> {
+    return apiService.post<ApiResponse<Geofence>>(
+      `${this.baseEndpoint}/geofences`,
+      geofence,
+      'createGeofence'
+    );
+  }
+
+  async getGeofences(): Promise<ApiResponse<Geofence[]>> {
+    return apiService.get<ApiResponse<Geofence[]>>(
+      `${this.baseEndpoint}/geofences`,
+      {},
+      'geofences'
+    );
+  }
+
+  async updateGeofence(id: string, updates: Partial<Geofence>): Promise<ApiResponse<Geofence>> {
+    return apiService.put<ApiResponse<Geofence>>(
+      `${this.baseEndpoint}/geofences/${id}`,
+      updates,
+      `updateGeofence-${id}`
+    );
+  }
+
+  async deleteGeofence(id: string): Promise<ApiResponse<{ message: string }>> {
+    return apiService.delete<ApiResponse<{ message: string }>>(
+      `${this.baseEndpoint}/geofences/${id}`,
+      `deleteGeofence-${id}`
+    );
+  }
+
+  // Location suggestions
+  async getLocationSuggestions(
+    latitude: number,
+    longitude: number,
+    radiusKm: number = 1,
+    type?: string,
+    limit: number = 20
+  ): Promise<ApiResponse<LocationSuggestion[]>> {
+    return apiService.get<ApiResponse<LocationSuggestion[]>>(
+      `${this.baseEndpoint}/suggestions`,
+      { latitude, longitude, radiusKm, type, limit },
+      'locationSuggestions'
+    );
+  }
+
+  // Emergency features
+  async getEmergencySettings(): Promise<ApiResponse<EmergencySettings>> {
+    return apiService.get<ApiResponse<EmergencySettings>>(
+      `${this.baseEndpoint}/emergency/settings`,
+      {},
+      'emergencySettings'
+    );
+  }
+
+  async updateEmergencySettings(settings: Partial<EmergencySettings>): Promise<ApiResponse<EmergencySettings>> {
+    return apiService.put<ApiResponse<EmergencySettings>>(
+      `${this.baseEndpoint}/emergency/settings`,
+      settings,
+      'updateEmergencySettings'
+    );
+  }
+
+  async triggerEmergency(location: LocationData, message?: string): Promise<ApiResponse<{ message: string }>> {
+    return apiService.post<ApiResponse<{ message: string }>>(
+      `${this.baseEndpoint}/emergency/trigger`,
+      { location, message },
+      'triggerEmergency'
+    );
+  }
+
+  async cancelEmergency(): Promise<ApiResponse<{ message: string }>> {
+    return apiService.post<ApiResponse<{ message: string }>>(
+      `${this.baseEndpoint}/emergency/cancel`,
+      {},
+      'cancelEmergency'
+    );
+  }
+
+  // Safe zones
+  async createSafeZone(safeZone: Omit<SafeZone, 'id' | 'createdAt' | 'updatedAt'>): Promise<ApiResponse<SafeZone>> {
+    return apiService.post<ApiResponse<SafeZone>>(
+      `${this.baseEndpoint}/safe-zones`,
+      safeZone,
+      'createSafeZone'
+    );
+  }
+
+  async getSafeZones(): Promise<ApiResponse<SafeZone[]>> {
+    return apiService.get<ApiResponse<SafeZone[]>>(
+      `${this.baseEndpoint}/safe-zones`,
+      {},
+      'safeZones'
+    );
+  }
+
+  async updateSafeZone(id: string, updates: Partial<SafeZone>): Promise<ApiResponse<SafeZone>> {
+    return apiService.put<ApiResponse<SafeZone>>(
+      `${this.baseEndpoint}/safe-zones/${id}`,
+      updates,
+      `updateSafeZone-${id}`
+    );
+  }
+
+  async deleteSafeZone(id: string): Promise<ApiResponse<{ message: string }>> {
+    return apiService.delete<ApiResponse<{ message: string }>>(
+      `${this.baseEndpoint}/safe-zones/${id}`,
+      `deleteSafeZone-${id}`
+    );
+  }
+
+  // Reverse geocoding
+  async reverseGeocode(latitude: number, longitude: number): Promise<ApiResponse<{
+    address: {
+      street?: string;
+      city?: string;
+      state?: string;
+      country?: string;
+      postalCode?: string;
     };
-
-    try {
-      this.watchId = Geolocation.watchPosition(
-        (position) => {
-          const coordinates: LocationCoordinates = {
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-            altitude: position.coords.altitude || undefined,
-            accuracy: position.coords.accuracy,
-            heading: position.coords.heading || undefined,
-            speed: position.coords.speed || undefined,
-          };
-
-          this.currentLocation = coordinates;
-          this.lastLocationUpdate = Date.now();
-          
-          const locationUpdate: LocationUpdate = {
-            coordinates,
-            timestamp: position.timestamp,
-            mocked: position.mocked,
-          };
-
-          this.notifyLocationUpdateCallbacks(locationUpdate);
-        },
-        (error) => {
-          const locationError: LocationError = {
-            code: error.code,
-            message: error.message,
-          };
-          
-          this.notifyLocationErrorCallbacks(locationError);
-        },
-        defaultOptions
-      );
-
-      return true;
-    } catch (error) {
-      console.error('Error starting location tracking:', error);
-      return false;
-    }
+    formattedAddress: string;
+  }>> {
+    return apiService.get<ApiResponse<{
+      address: {
+        street?: string;
+        city?: string;
+        state?: string;
+        country?: string;
+        postalCode?: string;
+      };
+      formattedAddress: string;
+    }>>(
+      `${this.baseEndpoint}/reverse-geocode`,
+      { latitude, longitude },
+      'reverseGeocode'
+    );
   }
 
-  /**
-   * Stop watching location changes
-   */
-  stopLocationTracking(): void {
-    if (this.watchId !== null) {
-      Geolocation.clearWatch(this.watchId);
-      this.watchId = null;
-    }
+  // Forward geocoding
+  async geocode(address: string): Promise<ApiResponse<Array<{
+    latitude: number;
+    longitude: number;
+    formattedAddress: string;
+    confidence: number;
+  }>>> {
+    return apiService.get<ApiResponse<Array<{
+      latitude: number;
+      longitude: number;
+      formattedAddress: string;
+      confidence: number;
+    }>>>(
+      `${this.baseEndpoint}/geocode`,
+      { address },
+      'geocode'
+    );
   }
 
-  /**
-   * Get last known location
-   */
-  getLastKnownLocation(): LocationCoordinates | null {
-    return this.currentLocation;
-  }
-
-  /**
-   * Check if location is recent
-   */
-  isLocationRecent(maxAgeMs: number = 30000): boolean {
-    if (this.lastLocationUpdate === 0) return false;
-    return Date.now() - this.lastLocationUpdate <= maxAgeMs;
-  }
-
-  /**
-   * Calculate distance between two coordinates (Haversine formula)
-   */
+  // Utility methods
   calculateDistance(
     lat1: number,
     lon1: number,
     lat2: number,
     lon2: number
   ): number {
-    const R = 6371; // Earth's radius in kilometers
-    const dLat = this.toRadians(lat2 - lat1);
-    const dLon = this.toRadians(lon2 - lon1);
-    
-    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-              Math.cos(this.toRadians(lat1)) * Math.cos(this.toRadians(lat2)) *
-              Math.sin(dLon / 2) * Math.sin(dLon / 2);
-    
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const R = 6371; // Earth's radius in km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
     return R * c;
   }
 
-  /**
-   * Check if coordinates are within a radius
-   */
-  isWithinRadius(
-    lat1: number,
-    lon1: number,
-    lat2: number,
-    lon2: number,
-    radiusKm: number
-  ): boolean {
-    const distance = this.calculateDistance(lat1, lon1, lat2, lon2);
-    return distance <= radiusKm;
-  }
-
-  /**
-   * Get location accuracy level
-   */
-  getAccuracyLevel(accuracy: number): LocationAccuracy {
-    if (accuracy <= 10) return LocationAccuracy.HIGH;
-    if (accuracy <= 50) return LocationAccuracy.MEDIUM;
-    return LocationAccuracy.LOW;
-  }
-
-  /**
-   * Show location permission dialog
-   */
-  showLocationPermissionDialog(): void {
-    Alert.alert(
-      'Location Permission Required',
-      'This app needs access to your location to provide location-based features. Please enable location permissions in your device settings.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Settings', onPress: this.openAppSettings },
-      ]
-    );
-  }
-
-  /**
-   * Open app settings
-   */
-  openAppSettings(): void {
-    // This would typically open the app settings
-    // Implementation depends on additional libraries like react-native-permissions
-    console.log('Opening app settings...');
-  }
-
-  /**
-   * Subscribe to location updates
-   */
-  onLocationUpdate(callback: (location: LocationUpdate) => void): () => void {
-    this.locationUpdateCallbacks.push(callback);
-    
-    return () => {
-      const index = this.locationUpdateCallbacks.indexOf(callback);
-      if (index > -1) {
-        this.locationUpdateCallbacks.splice(index, 1);
-      }
-    };
-  }
-
-  /**
-   * Subscribe to location errors
-   */
-  onLocationError(callback: (error: LocationError) => void): () => void {
-    this.locationErrorCallbacks.push(callback);
-    
-    return () => {
-      const index = this.locationErrorCallbacks.indexOf(callback);
-      if (index > -1) {
-        this.locationErrorCallbacks.splice(index, 1);
-      }
-    };
-  }
-
-  /**
-   * Subscribe to permission status changes
-   */
-  onPermissionStatusChange(callback: (status: LocationPermissionStatus) => void): () => void {
-    this.permissionStatusCallbacks.push(callback);
-    
-    return () => {
-      const index = this.permissionStatusCallbacks.indexOf(callback);
-      if (index > -1) {
-        this.permissionStatusCallbacks.splice(index, 1);
-      }
-    };
-  }
-
-  /**
-   * Clean up all subscriptions
-   */
-  cleanup(): void {
-    this.stopLocationTracking();
-    this.locationUpdateCallbacks = [];
-    this.locationErrorCallbacks = [];
-    this.permissionStatusCallbacks = [];
-  }
-
-  // Private methods
-  private getLocationPermission(): Permission {
-    return Platform.OS === 'ios' 
-      ? PERMISSIONS.IOS.LOCATION_WHEN_IN_USE 
-      : PERMISSIONS.ANDROID.ACCESS_FINE_LOCATION;
-  }
-
-  private convertPermissionResult(result: string): LocationPermissionStatus {
-    switch (result) {
-      case RESULTS.GRANTED:
-        return LocationPermissionStatus.GRANTED;
-      case RESULTS.DENIED:
-        return LocationPermissionStatus.DENIED;
-      case RESULTS.BLOCKED:
-        return LocationPermissionStatus.BLOCKED;
-      case RESULTS.UNAVAILABLE:
-        return LocationPermissionStatus.UNAVAILABLE;
-      case RESULTS.LIMITED:
-        return LocationPermissionStatus.LIMITED;
-      default:
-        return LocationPermissionStatus.UNAVAILABLE;
+  formatDistance(distanceKm: number): string {
+    if (distanceKm < 1) {
+      return `${Math.round(distanceKm * 1000)}m`;
     }
+    return `${distanceKm.toFixed(1)}km`;
   }
 
-  private toRadians(degrees: number): number {
-    return degrees * (Math.PI / 180);
+  isLocationRecent(timestamp: number, maxAgeMinutes: number = 30): boolean {
+    const now = Date.now();
+    const ageMinutes = (now - timestamp) / (1000 * 60);
+    return ageMinutes <= maxAgeMinutes;
   }
 
-  private notifyLocationUpdateCallbacks(location: LocationUpdate): void {
-    this.locationUpdateCallbacks.forEach(callback => {
-      try {
-        callback(location);
-      } catch (error) {
-        console.error('Error in location update callback:', error);
-      }
-    });
+  isLocationAccurate(accuracy: number, threshold: number = 100): boolean {
+    return accuracy <= threshold;
   }
 
-  private notifyLocationErrorCallbacks(error: LocationError): void {
-    this.locationErrorCallbacks.forEach(callback => {
-      try {
-        callback(error);
-      } catch (error) {
-        console.error('Error in location error callback:', error);
-      }
-    });
+  isInsideGeofence(
+    userLat: number,
+    userLon: number,
+    geofenceLat: number,
+    geofenceLon: number,
+    radiusMeters: number
+  ): boolean {
+    const distance = this.calculateDistance(userLat, userLon, geofenceLat, geofenceLon);
+    return distance * 1000 <= radiusMeters;
   }
 
-  private notifyPermissionStatusCallbacks(status: LocationPermissionStatus): void {
-    this.permissionStatusCallbacks.forEach(callback => {
-      try {
-        callback(status);
-      } catch (error) {
-        console.error('Error in permission status callback:', error);
-      }
-    });
+  getBearing(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const lat1Rad = lat1 * Math.PI / 180;
+    const lat2Rad = lat2 * Math.PI / 180;
+    
+    const y = Math.sin(dLon) * Math.cos(lat2Rad);
+    const x = Math.cos(lat1Rad) * Math.sin(lat2Rad) - 
+              Math.sin(lat1Rad) * Math.cos(lat2Rad) * Math.cos(dLon);
+    
+    let bearing = Math.atan2(y, x) * 180 / Math.PI;
+    return (bearing + 360) % 360;
+  }
+
+  formatBearing(bearing: number): string {
+    const directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+    const index = Math.round(bearing / 45) % 8;
+    return directions[index];
+  }
+
+  validateLocationData(location: LocationData): string[] {
+    const errors: string[] = [];
+
+    if (location.latitude < -90 || location.latitude > 90) {
+      errors.push('Invalid latitude');
+    }
+
+    if (location.longitude < -180 || location.longitude > 180) {
+      errors.push('Invalid longitude');
+    }
+
+    if (location.accuracy && location.accuracy < 0) {
+      errors.push('Invalid accuracy');
+    }
+
+    if (location.speed && location.speed < 0) {
+      errors.push('Invalid speed');
+    }
+
+    if (location.heading && (location.heading < 0 || location.heading >= 360)) {
+      errors.push('Invalid heading');
+    }
+
+    return errors;
+  }
+
+  validateGeofence(geofence: Omit<Geofence, 'id' | 'createdAt' | 'updatedAt'>): string[] {
+    const errors: string[] = [];
+
+    if (!geofence.name || geofence.name.trim().length === 0) {
+      errors.push('Geofence name is required');
+    }
+
+    if (geofence.latitude < -90 || geofence.latitude > 90) {
+      errors.push('Invalid latitude');
+    }
+
+    if (geofence.longitude < -180 || geofence.longitude > 180) {
+      errors.push('Invalid longitude');
+    }
+
+    if (geofence.radius <= 0 || geofence.radius > 10000) {
+      errors.push('Radius must be between 1 and 10000 meters');
+    }
+
+    return errors;
+  }
+
+  getLocationAccuracyDescription(accuracy: number): string {
+    if (accuracy <= 5) return 'Very High';
+    if (accuracy <= 10) return 'High';
+    if (accuracy <= 20) return 'Good';
+    if (accuracy <= 50) return 'Fair';
+    if (accuracy <= 100) return 'Poor';
+    return 'Very Poor';
+  }
+
+  getLocationStalenessDescription(timestamp: number): string {
+    const ageMinutes = (Date.now() - timestamp) / (1000 * 60);
+    
+    if (ageMinutes < 1) return 'Just now';
+    if (ageMinutes < 5) return 'Very recent';
+    if (ageMinutes < 15) return 'Recent';
+    if (ageMinutes < 60) return 'Moderate';
+    if (ageMinutes < 240) return 'Old';
+    return 'Very old';
+  }
+
+  optimizeLocationSharing(settings: LocationSharingSettings): LocationSharingSettings {
+    const optimized = { ...settings };
+
+    // Auto-adjust update intervals based on activity
+    // This would be implemented based on device capabilities and battery optimization
+
+    return optimized;
   }
 }
 
-// Export singleton instance
 export const locationService = new LocationService();
-export default locationService;

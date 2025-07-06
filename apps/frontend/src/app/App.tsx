@@ -34,3 +34,6 @@ export const App: React.FC = () => {
     </QueryProvider>
   );
 };
+
+// Default export for imports
+export default App;
