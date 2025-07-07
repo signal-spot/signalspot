@@ -9,7 +9,7 @@ services:
       target: development
     environment:
       NODE_ENV: development
-      MIKRO_ORM_CLI_USE_TS_NODE: true
+      MIKRO_ORM_CLI_USE_TS_NODE: "true"
       MIKRO_ORM_CLI_CONFIG: ./src/database/mikro-orm.config.ts
     volumes:
       - ./apps/backend/src:/app/apps/backend/src
@@ -23,6 +23,10 @@ services:
 
   # React Native Metro Bundler for mobile development
   metro:
+    build:
+      context: .
+      dockerfile: apps/frontend/Dockerfile.dev
+      target: development
     profiles: []  # Always run in dev mode
     environment:
       NODE_ENV: development
@@ -39,6 +43,7 @@ services:
 
   # PostgreSQL with development settings
   postgres:
+    image: postgres:15-alpine
     environment:
       POSTGRES_DB: signalspot_dev
       POSTGRES_USER: dev_user
@@ -51,6 +56,7 @@ services:
 
   # Redis with development settings
   redis:
+    image: redis:7-alpine
     ports:
       - "6379:6379"
     volumes:
@@ -58,6 +64,7 @@ services:
 
   # Development tools (always enabled in dev)
   adminer:
+    image: adminer:4-standalone
     profiles: []  # Remove profiles to always run in dev
     ports:
       - "8080:8080"  # Change port to avoid conflict with Metro

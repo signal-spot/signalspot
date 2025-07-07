@@ -435,6 +435,9 @@ export class User extends AggregateRoot {
   @Property({ default: false })
   isEmailVerified = false;
 
+  @Property({ nullable: true })
+  emailVerifiedAt?: Date;
+
   @Property({ default: 0 })
   loginAttempts = 0;
 

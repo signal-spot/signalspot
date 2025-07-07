@@ -6,6 +6,8 @@ import { AppService } from './app.service';
 import { AuthModule } from '../auth/auth.module';
 import { LocationModule } from '../location/location.module';
 import { SignalSpotModule } from '../signal-spot/signal-spot.module';
+import { ProfileModule } from '../profile/profile.module';
+import { UploadModule } from '../upload/upload.module';
 import { databaseConfig } from '../database/database.config';
 
 @Module({
@@ -16,6 +18,8 @@ import { databaseConfig } from '../database/database.config';
     }),
     MikroOrmModule.forRoot(databaseConfig),
     AuthModule,
+    ProfileModule,
+    UploadModule,
     LocationModule,
     SignalSpotModule,
   ],

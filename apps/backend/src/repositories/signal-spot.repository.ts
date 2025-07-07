@@ -161,56 +161,106 @@ export class SignalSpotRepository implements ISignalSpotRepository {
       excludeExpired?: boolean;
     } = {}
   ): Promise<SignalSpot[]> {
-    const conditions: any = {
-      isActive: true
-    };
+    const limit = options.limit || 50;
+    const offset = options.offset || 0;
+    
+    // Build base conditions
+    let whereConditions = ['s.is_active = true'];
+    const params: any[] = [coordinates.latitude, coordinates.longitude, radiusKm * 1000]; // Convert km to meters
 
     if (options.excludeExpired !== false) {
-      conditions.expiresAt = { $gt: new Date() };
+      whereConditions.push('s.expires_at > NOW()');
     }
 
     if (options.visibility) {
-      conditions.visibility = options.visibility;
+      whereConditions.push('s.visibility = $' + (params.length + 1));
+      params.push(options.visibility);
     }
 
     if (options.types && options.types.length > 0) {
-      conditions.type = { $in: options.types };
+      whereConditions.push('s.type = ANY($' + (params.length + 1) + ')');
+      params.push(options.types);
     }
 
     if (options.tags && options.tags.length > 0) {
-      conditions.tags = { $overlap: options.tags };
+      whereConditions.push('s.tags && $' + (params.length + 1));
+      params.push(options.tags);
     }
 
-    const allSpots = await this.repository.find(conditions, {
-      populate: ['creator'],
-      limit: 1000 // Get more to filter by distance
-    });
+    const whereClause = whereConditions.join(' AND ');
 
-    // Filter by distance in memory
-    const nearbySpots = allSpots.filter(spot => {
-      const distance = this.calculateDistance(
-        coordinates,
-        Coordinates.create(spot.latitude, spot.longitude)
-      );
-      return distance <= radiusKm;
-    });
+    // PostGIS query for efficient spatial search
+    const query = `
+      SELECT s.*, 
+             ST_Distance(
+               ST_Point(s.longitude, s.latitude)::geography,
+               ST_Point($2, $1)::geography
+             ) as distance_meters,
+             u.id as creator_id,
+             u.username as creator_username,
+             u.email as creator_email,
+             u.first_name as creator_first_name,
+             u.last_name as creator_last_name,
+             u.avatar_url as creator_avatar_url,
+             u.is_verified as creator_is_verified
+      FROM signal_spot s
+      JOIN user u ON s.creator_id = u.id
+      WHERE ${whereClause}
+        AND ST_DWithin(
+          ST_Point(s.longitude, s.latitude)::geography,
+          ST_Point($2, $1)::geography,
+          $3
+        )
+      ORDER BY ST_Distance(
+        ST_Point(s.longitude, s.latitude)::geography,
+        ST_Point($2, $1)::geography
+      )
+      LIMIT ${limit} OFFSET ${offset};
+    `;
 
-    // Sort by distance and apply pagination
-    nearbySpots.sort((a, b) => {
-      const distA = this.calculateDistance(
-        coordinates,
-        Coordinates.create(a.latitude, a.longitude)
-      );
-      const distB = this.calculateDistance(
-        coordinates,
-        Coordinates.create(b.latitude, b.longitude)
-      );
-      return distA - distB;
-    });
+    const result = await this.em.getConnection().execute(query, params);
+    
+    return this.mapRawResultsToEntities(result);
+  }
 
-    const offset = options.offset || 0;
-    const limit = options.limit || 50;
-    return nearbySpots.slice(offset, offset + limit);
+  private mapRawResultsToEntities(rawResults: any[]): SignalSpot[] {
+    return rawResults.map(row => {
+      const spot = new SignalSpot();
+      
+      // Map basic spot properties
+      Object.assign(spot, {
+        id: row.id,
+        message: row.message,
+        title: row.title,
+        latitude: parseFloat(row.latitude),
+        longitude: parseFloat(row.longitude),
+        radiusInMeters: parseInt(row.radius_in_meters || '100'),
+        durationInHours: parseInt(row.duration_in_hours || '24'),
+        status: row.status,
+        visibility: row.visibility,
+        type: row.type,
+        tags: row.tags,
+        viewCount: parseInt(row.view_count || '0'),
+        likeCount: parseInt(row.like_count || '0'),
+        dislikeCount: parseInt(row.dislike_count || '0'),
+        replyCount: parseInt(row.reply_count || '0'),
+        shareCount: parseInt(row.share_count || '0'),
+        reportCount: parseInt(row.report_count || '0'),
+        isActive: row.is_active,
+        isPinned: row.is_pinned,
+        metadata: row.metadata,
+        createdAt: new Date(row.created_at),
+        updatedAt: new Date(row.updated_at),
+        expiresAt: new Date(row.expires_at)
+      });
+
+      // Add distance if available
+      if (row.distance_meters !== undefined) {
+        spot.metadata = { ...spot.metadata, distance: parseFloat(row.distance_meters) };
+      }
+
+      return spot;
+    });
   }
 
   private calculateDistance(coord1: Coordinates, coord2: Coordinates): number {
@@ -233,28 +283,35 @@ export class SignalSpotRepository implements ISignalSpotRepository {
     radiusKm: number,
     visibility?: SpotVisibility
   ): Promise<SignalSpot[]> {
-    const conditions: any = {
-      isActive: true,
-      status: SpotStatus.ACTIVE,
-      expiresAt: { $gt: new Date() }
-    };
+    const params: any[] = [coordinates.latitude, coordinates.longitude, radiusKm * 1000];
+    let whereClause = 's.is_active = true AND s.status = \'active\' AND s.expires_at > NOW()';
 
     if (visibility) {
-      conditions.visibility = visibility;
+      whereClause += ' AND s.visibility = $' + (params.length + 1);
+      params.push(visibility);
     }
 
-    const allSpots = await this.repository.find(conditions, {
-      populate: ['creator']
-    });
-
-    // Filter by distance
-    return allSpots.filter(spot => {
-      const distance = this.calculateDistance(
-        coordinates,
-        Coordinates.create(spot.latitude, spot.longitude)
+    const query = `
+      SELECT s.*, 
+             ST_Distance(
+               ST_Point(s.longitude, s.latitude)::geography,
+               ST_Point($2, $1)::geography
+             ) as distance_meters
+      FROM signal_spot s
+      WHERE ${whereClause}
+        AND ST_DWithin(
+          ST_Point(s.longitude, s.latitude)::geography,
+          ST_Point($2, $1)::geography,
+          $3
+        )
+      ORDER BY ST_Distance(
+        ST_Point(s.longitude, s.latitude)::geography,
+        ST_Point($2, $1)::geography
       );
-      return distance <= radiusKm;
-    });
+    `;
+
+    const result = await this.em.getConnection().execute(query, params);
+    return this.mapRawResultsToEntities(result);
   }
 
   async findByCreator(
@@ -593,24 +650,26 @@ export class SignalSpotRepository implements ISignalSpotRepository {
   }
 
   async countInRadius(coordinates: Coordinates, radiusKm: number): Promise<number> {
-    const conditions = {
-      isActive: true,
-      status: SpotStatus.ACTIVE,
-      expiresAt: { $gt: new Date() }
-    };
+    const query = `
+      SELECT COUNT(*) as count
+      FROM signal_spot s
+      WHERE s.is_active = true
+        AND s.status = 'active'
+        AND s.expires_at > NOW()
+        AND ST_DWithin(
+          ST_Point(s.longitude, s.latitude)::geography,
+          ST_Point($2, $1)::geography,
+          $3
+        );
+    `;
 
-    const allSpots = await this.repository.find(conditions);
-    
-    // Count spots within radius
-    const nearbySpots = allSpots.filter(spot => {
-      const distance = this.calculateDistance(
-        coordinates,
-        Coordinates.create(spot.latitude, spot.longitude)
-      );
-      return distance <= radiusKm;
-    });
+    const result = await this.em.getConnection().execute(query, [
+      coordinates.latitude,
+      coordinates.longitude,
+      radiusKm * 1000
+    ]);
 
-    return nearbySpots.length;
+    return parseInt(result[0]?.count || '0');
   }
 
   async markExpired(spotIds: SpotId[]): Promise<void> {

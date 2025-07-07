@@ -1,4 +1,5 @@
 import { apiService, ApiResponse } from './api.service';
+import { SignatureConnectionPreferencesDto, ConnectionMatchDto, SignatureConnectionStatsDto } from '../types/profile.types';
 
 // User profile interfaces
 export interface UserProfile {
@@ -281,11 +282,107 @@ class ProfileService {
   }
 
   // Update profile settings
-  async updateProfileSettings(settingsData: UpdateProfileSettingsRequest): Promise<ApiResponse<UserProfile>> {
-    return apiService.put<ApiResponse<UserProfile>>(
-      `${this.baseEndpoint}/me/settings`,
+  async updateProfileSettings(settingsData: UpdateProfileSettingsRequest): Promise<ApiResponse<{ message: string }>> {
+    return apiService.put<ApiResponse<{ message: string }>>(
+      `${this.baseEndpoint}/settings`,
       settingsData,
       'updateSettings'
+    );
+  }
+
+  // Update profile visibility
+  async updateProfileVisibility(visibility: 'public' | 'friends' | 'private'): Promise<ApiResponse<{ message: string }>> {
+    return apiService.put<ApiResponse<{ message: string }>>(
+      `${this.baseEndpoint}/visibility/${visibility}`,
+      {},
+      'updateVisibility'
+    );
+  }
+
+  // Get profile analytics
+  async getProfileAnalytics(): Promise<ApiResponse<ProfileAnalytics>> {
+    return apiService.get<ApiResponse<ProfileAnalytics>>(
+      `${this.baseEndpoint}/analytics`,
+      {},
+      'profileAnalytics'
+    );
+  }
+
+  // Get connection suggestions
+  async getConnectionSuggestions(limit = 10): Promise<ApiResponse<ProfileSearchResult[]>> {
+    return apiService.get<ApiResponse<ProfileSearchResult[]>>(
+      `${this.baseEndpoint}/suggestions`,
+      { limit },
+      'connectionSuggestions'
+    );
+  }
+
+  // Search profiles with backend API
+  async searchProfiles(query: {
+    search?: string;
+    location?: string;
+    skills?: string[];
+    interests?: string[];
+    occupation?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ApiResponse<{
+    profiles: ProfileSearchResult[];
+    total: number;
+    hasMore: boolean;
+  }>> {
+    return apiService.get<ApiResponse<{
+      profiles: ProfileSearchResult[];
+      total: number;
+      hasMore: boolean;
+    }>>(
+      `${this.baseEndpoint}/search`,
+      query,
+      'searchProfiles'
+    );
+  }
+
+  // Signature Connection methods
+  async updateSignatureConnectionPreferences(preferences: SignatureConnectionPreferencesDto): Promise<ApiResponse<{ message: string }>> {
+    return apiService.put<ApiResponse<{ message: string }>>(
+      `${this.baseEndpoint}/signature-connection/preferences`,
+      preferences,
+      'updateSignatureConnectionPreferences'
+    );
+  }
+
+  async getSignatureConnectionPreferences(): Promise<ApiResponse<SignatureConnectionPreferencesDto>> {
+    return apiService.get<ApiResponse<SignatureConnectionPreferencesDto>>(
+      `${this.baseEndpoint}/signature-connection/preferences`,
+      {},
+      'getSignatureConnectionPreferences'
+    );
+  }
+
+  async findSignatureConnectionMatches(params: {
+    limit?: number;
+    offset?: number;
+  } = {}): Promise<ApiResponse<{
+    matches: ConnectionMatchDto[];
+    total: number;
+    hasMore: boolean;
+  }>> {
+    return apiService.get<ApiResponse<{
+      matches: ConnectionMatchDto[];
+      total: number;
+      hasMore: boolean;
+    }>>(
+      `${this.baseEndpoint}/signature-connection/matches`,
+      params,
+      'findSignatureConnectionMatches'
+    );
+  }
+
+  async getSignatureConnectionStats(): Promise<ApiResponse<SignatureConnectionStatsDto>> {
+    return apiService.get<ApiResponse<SignatureConnectionStatsDto>>(
+      `${this.baseEndpoint}/signature-connection/stats`,
+      {},
+      'getSignatureConnectionStats'
     );
   }
 
@@ -294,9 +391,9 @@ class ProfileService {
     uri: string;
     name: string;
     type: string;
-  }): Promise<ApiResponse<FileUploadResponse>> {
-    return apiService.uploadFile<ApiResponse<FileUploadResponse>>(
-      `${this.baseEndpoint}/me/avatar`,
+  }): Promise<ApiResponse<UserProfile>> {
+    return apiService.uploadFile<ApiResponse<UserProfile>>(
+      `${this.baseEndpoint}/avatar`,
       file,
       {},
       'uploadAvatar'
@@ -304,9 +401,9 @@ class ProfileService {
   }
 
   // Remove profile avatar
-  async removeAvatar(): Promise<ApiResponse<void>> {
-    return apiService.delete<ApiResponse<void>>(
-      `${this.baseEndpoint}/me/avatar`,
+  async removeAvatar(): Promise<ApiResponse<UserProfile>> {
+    return apiService.delete<ApiResponse<UserProfile>>(
+      `${this.baseEndpoint}/avatar`,
       'removeAvatar'
     );
   }

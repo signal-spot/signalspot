@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,12 +9,13 @@ import {
   Dimensions,
   ActivityIndicator,
 } from 'react-native';
-import MapView, { Marker, Circle, Region } from 'react-native-maps';
-import { useFocusEffect } from '@react-navigation/native';
+import MapView, { Marker, Circle, Region, Callout } from 'react-native-maps';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useLocation } from '../../hooks/useLocation';
 import { useAuth } from '../../providers/AuthProvider';
 import { signalSpotService, SignalSpot, CreateSpotRequest } from '../../services/signalSpot.service';
 import { useLoadingState } from '../../services/api.service';
+import { CreateSpotModal } from '../../components/spot/CreateSpotModal';
 import styled from 'styled-components/native';
 
 const { width, height } = Dimensions.get('window');
@@ -196,6 +197,8 @@ const SpotCounterText = styled.Text`
 const MapScreen: React.FC = () => {
   const { location, getCurrentLocation, requestLocationPermission } = useLocation();
   const { user } = useAuth();
+  const navigation = useNavigation();
+  const mapRef = useRef<MapView>(null);
   
   // Loading states
   const isLoadingNearby = useLoadingState('nearbySpots');
@@ -203,9 +206,6 @@ const MapScreen: React.FC = () => {
   
   // State
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [spotTitle, setSpotTitle] = useState('');
-  const [spotContent, setSpotContent] = useState('');
-  const [spotType, setSpotType] = useState<'social' | 'help' | 'event' | 'info' | 'alert'>('social');
   const [spots, setSpots] = useState<SignalSpot[]>([]);
   const [selectedSpot, setSelectedSpot] = useState<SignalSpot | null>(null);
   const [mapRegion, setMapRegion] = useState<Region>({
@@ -214,25 +214,81 @@ const MapScreen: React.FC = () => {
     latitudeDelta: 0.0922,
     longitudeDelta: 0.0421,
   });
+  const [isMapReady, setIsMapReady] = useState(false);
+  const [visibleRegion, setVisibleRegion] = useState<Region | null>(null);
 
-  const spotTypes = [
-    { key: 'social', label: '💬', name: 'Social' },
-    { key: 'help', label: '🆘', name: 'Help' },
-    { key: 'event', label: '🎉', name: 'Event' },
-    { key: 'info', label: 'ℹ️', name: 'Info' },
-    { key: 'alert', label: '⚠️', name: 'Alert' },
-  ] as const;
+  // Memoized visible spots for performance
+  const visibleSpots = useMemo(() => {
+    if (!visibleRegion) return spots;
+    
+    // Filter spots within visible region
+    return spots.filter(spot => {
+      const latDiff = Math.abs(spot.latitude - visibleRegion.latitude);
+      const lngDiff = Math.abs(spot.longitude - visibleRegion.longitude);
+      return latDiff <= visibleRegion.latitudeDelta / 2 && 
+             lngDiff <= visibleRegion.longitudeDelta / 2;
+    });
+  }, [spots, visibleRegion]);
 
-  // Load nearby spots
-  const loadNearbySpots = useCallback(async () => {
-    if (!location) return;
+  // Memoized clustered markers for performance
+  const clusteredMarkers = useMemo(() => {
+    if (visibleSpots.length < 20) return visibleSpots;
+    
+    // Simple clustering based on zoom level
+    const clusterRadius = visibleRegion ? 
+      Math.min(visibleRegion.latitudeDelta, visibleRegion.longitudeDelta) * 0.05 : 0.01;
+    
+    const clusters: { spots: SignalSpot[], center: { latitude: number, longitude: number } }[] = [];
+    const processedSpots = new Set<string>();
+    
+    visibleSpots.forEach(spot => {
+      if (processedSpots.has(spot.id)) return;
+      
+      const nearbySpots = visibleSpots.filter(s => {
+        if (processedSpots.has(s.id)) return false;
+        const distance = Math.sqrt(
+          Math.pow(s.latitude - spot.latitude, 2) + 
+          Math.pow(s.longitude - spot.longitude, 2)
+        );
+        return distance < clusterRadius;
+      });
+      
+      if (nearbySpots.length > 3) {
+        // Create cluster
+        nearbySpots.forEach(s => processedSpots.add(s.id));
+        const avgLat = nearbySpots.reduce((sum, s) => sum + s.latitude, 0) / nearbySpots.length;
+        const avgLng = nearbySpots.reduce((sum, s) => sum + s.longitude, 0) / nearbySpots.length;
+        clusters.push({
+          spots: nearbySpots,
+          center: { latitude: avgLat, longitude: avgLng }
+        });
+      } else {
+        processedSpots.add(spot.id);
+      }
+    });
+    
+    // Return individual spots that weren't clustered
+    const individualSpots = visibleSpots.filter(s => !processedSpots.has(s.id));
+    return [...individualSpots, ...clusters];
+  }, [visibleSpots, visibleRegion]);
+
+  // Load nearby spots with debouncing for region changes
+  const loadNearbySpots = useCallback(async (region?: Region) => {
+    const targetRegion = region || visibleRegion || mapRegion;
+    if (!targetRegion) return;
 
     try {
+      // Calculate radius based on visible region
+      const radiusKm = Math.max(
+        targetRegion.latitudeDelta * 111, // 1 degree latitude ≈ 111km
+        targetRegion.longitudeDelta * 111 * Math.cos(targetRegion.latitude * Math.PI / 180)
+      );
+
       const response = await signalSpotService.getNearbySpots({
-        latitude: location.latitude,
-        longitude: location.longitude,
-        radiusKm: 2,
-        limit: 50,
+        latitude: targetRegion.latitude,
+        longitude: targetRegion.longitude,
+        radiusKm: Math.min(radiusKm, 10), // Max 10km radius
+        limit: 100,
         includeExpired: false,
       });
 
@@ -241,23 +297,51 @@ const MapScreen: React.FC = () => {
       }
     } catch (error) {
       console.error('Error loading nearby spots:', error);
-      Alert.alert('오류', '근처 시그널 스팟을 불러오는데 실패했습니다.');
     }
-  }, [location]);
+  }, [visibleRegion, mapRegion]);
 
   // Focus effect to refresh location and spots when screen is focused
   useFocusEffect(
     useCallback(() => {
       handleGetCurrentLocation();
-    }, [])
+      // Subscribe to real-time updates when focused
+      const unsubscribe = signalSpotService.subscribeToAreaUpdates(
+        {
+          latitude: location?.latitude || mapRegion.latitude,
+          longitude: location?.longitude || mapRegion.longitude,
+          radiusKm: 2,
+        },
+        (updatedSpots) => {
+          setSpots(updatedSpots);
+        }
+      );
+      
+      return () => {
+        unsubscribe.then(unsub => unsub());
+      };
+    }, [location, mapRegion])
   );
 
-  // Load spots when location changes
+  // Load spots when map is ready
   useEffect(() => {
-    if (location) {
-      loadNearbySpots();
+    if (isMapReady && visibleRegion) {
+      loadNearbySpots(visibleRegion);
     }
-  }, [location, loadNearbySpots]);
+  }, [isMapReady, loadNearbySpots]);
+
+  // Debounced region change handler
+  const handleRegionChange = useCallback((region: Region) => {
+    setVisibleRegion(region);
+    // Only reload if moved significantly
+    if (mapRegion) {
+      const latDiff = Math.abs(region.latitude - mapRegion.latitude);
+      const lngDiff = Math.abs(region.longitude - mapRegion.longitude);
+      if (latDiff > region.latitudeDelta * 0.3 || lngDiff > region.longitudeDelta * 0.3) {
+        loadNearbySpots(region);
+      }
+    }
+    setMapRegion(region);
+  }, [mapRegion, loadNearbySpots]);
 
   const handleGetCurrentLocation = async () => {
     try {
@@ -276,50 +360,23 @@ const MapScreen: React.FC = () => {
     }
   };
 
-  const handleCreateSpot = async () => {
-    if (!spotTitle.trim()) {
-      Alert.alert('알림', '시그널 제목을 입력해주세요.');
-      return;
-    }
-
-    if (!spotContent.trim()) {
-      Alert.alert('알림', '시그널 메시지를 입력해주세요.');
-      return;
-    }
-
-    if (!location) {
-      Alert.alert('위치 오류', '현재 위치를 가져올 수 없습니다.');
-      return;
-    }
-
+  const handleCreateSpot = async (spotData: CreateSpotRequest) => {
     try {
-      const spotData: CreateSpotRequest = {
-        latitude: location.latitude,
-        longitude: location.longitude,
-        title: spotTitle,
-        content: spotContent,
-        type: spotType,
-        visibility: 'public',
-        radius: 100,
-        maxDuration: 24,
-      };
-
-      const validationErrors = signalSpotService.validateSpotData(spotData);
-      if (validationErrors.length > 0) {
-        Alert.alert('입력 오류', validationErrors.join('\n'));
-        return;
-      }
-
       const response = await signalSpotService.createSpot(spotData);
 
       if (response.success) {
-        setSpots(prev => [...prev, response.data]);
-        setSpotTitle('');
-        setSpotContent('');
-        setSpotType('social');
-        setShowCreateModal(false);
-        
+        setSpots(prev => [response.data, ...prev]);
         Alert.alert('성공', '시그널 스팟이 생성되었습니다!');
+        
+        // Animate to new spot
+        if (mapRef.current) {
+          mapRef.current.animateToRegion({
+            latitude: response.data.latitude,
+            longitude: response.data.longitude,
+            latitudeDelta: 0.01,
+            longitudeDelta: 0.01,
+          }, 500);
+        }
       }
     } catch (error: any) {
       console.error('Error creating spot:', error);
@@ -329,59 +386,74 @@ const MapScreen: React.FC = () => {
 
   const handleSpotPress = (spot: SignalSpot) => {
     setSelectedSpot(spot);
+    // Navigate to detail screen directly
+    navigation.navigate('SpotDetail', { spotId: spot.id });
+  };
+
+  const renderSpotMarker = (item: SignalSpot | { spots: SignalSpot[], center: { latitude: number, longitude: number } }) => {
+    if ('spots' in item) {
+      // Render cluster
+      return (
+        <Marker
+          key={`cluster-${item.spots[0].id}`}
+          coordinate={item.center}
+          onPress={() => {
+            // Zoom in on cluster
+            if (mapRef.current) {
+              mapRef.current.animateToRegion({
+                ...item.center,
+                latitudeDelta: mapRegion.latitudeDelta * 0.5,
+                longitudeDelta: mapRegion.longitudeDelta * 0.5,
+              }, 300);
+            }
+          }}
+        >
+          <View style={styles.clusterMarker}>
+            <Text style={styles.clusterText}>{item.spots.length}</Text>
+          </View>
+        </Marker>
+      );
+    }
     
-    const distance = signalSpotService.getSpotDistance(spot, location?.latitude || 0, location?.longitude || 0);
-    const formattedDistance = signalSpotService.formatSpotDistance(distance);
+    // Render individual spot
+    const spot = item;
+    const isSelected = selectedSpot?.id === spot.id;
+    const typeIcon = signalSpotService.getSpotTypeIcon(spot.type);
+    const typeColor = signalSpotService.getSpotTypeColor(spot.type);
     
-    Alert.alert(
-      `${signalSpotService.getSpotTypeIcon(spot.type)} ${spot.title}`,
-      `${spot.content}\n\n거리: ${formattedDistance}\n생성자: ${spot.creatorUsername}\n좋아요: ${spot.likeCount} | 댓글: ${spot.replyCount}`,
-      [
-        { text: '닫기', style: 'cancel' },
-        { text: '상세보기', onPress: () => handleViewSpotDetails(spot) },
-        { text: '❤️ 좋아요', onPress: () => handleSpotInteraction(spot, 'like') }
-      ]
+    return (
+      <Marker
+        key={spot.id}
+        coordinate={{
+          latitude: spot.latitude,
+          longitude: spot.longitude,
+        }}
+        onPress={() => handleSpotPress(spot)}
+        tracksViewChanges={false} // Performance optimization
+      >
+        <View style={[
+          styles.spotMarker,
+          { 
+            backgroundColor: typeColor,
+            borderColor: isSelected ? '#ffffff' : typeColor,
+            borderWidth: isSelected ? 3 : 2,
+            transform: [{ scale: isSelected ? 1.2 : 1 }],
+          }
+        ]}>
+          <Text style={styles.spotMarkerText}>{typeIcon}</Text>
+        </View>
+        <Callout tooltip>
+          <View style={styles.calloutContainer}>
+            <Text style={styles.calloutTitle}>{spot.title}</Text>
+            <Text style={styles.calloutContent} numberOfLines={2}>{spot.content}</Text>
+            <View style={styles.calloutMeta}>
+              <Text style={styles.calloutMetaText}>{spot.creatorUsername}</Text>
+              <Text style={styles.calloutMetaText}>❤ {spot.likeCount}</Text>
+            </View>
+          </View>
+        </Callout>
+      </Marker>
     );
-  };
-
-  const handleViewSpotDetails = async (spot: SignalSpot) => {
-    try {
-      const response = await signalSpotService.getSpotById(spot.id);
-      if (response.success) {
-        // TODO: Navigate to spot details screen
-        Alert.alert('상세 정보', `스팟 ID: ${spot.id}\n활성 상태: ${response.data.isActive ? '활성' : '비활성'}`);
-      }
-    } catch (error: any) {
-      Alert.alert('오류', '상세 정보를 불러올 수 없습니다.');
-    }
-  };
-
-  const handleSpotInteraction = async (spot: SignalSpot, type: 'like' | 'dislike' | 'share' | 'report') => {
-    try {
-      const response = await signalSpotService.interactWithSpot(spot.id, { type });
-      
-      if (response.success) {
-        // Update the spot in the list
-        setSpots(prev => 
-          prev.map(s => s.id === spot.id ? response.data : s)
-        );
-        
-        switch (type) {
-          case 'like':
-            Alert.alert('성공', '좋아요를 눌렀습니다!');
-            break;
-          case 'share':
-            Alert.alert('성공', '시그널 스팟을 공유했습니다!');
-            break;
-          case 'report':
-            Alert.alert('성공', '신고가 접수되었습니다.');
-            break;
-        }
-      }
-    } catch (error: any) {
-      console.error('Error interacting with spot:', error);
-      Alert.alert('오류', error.message || '상호작용에 실패했습니다.');
-    }
   };
 
   if (!location) {
@@ -409,9 +481,11 @@ const MapScreen: React.FC = () => {
 
       <MapContainer>
         <MapView
+          ref={mapRef}
           style={styles.map}
-          region={mapRegion}
-          onRegionChangeComplete={setMapRegion}
+          initialRegion={mapRegion}
+          onMapReady={() => setIsMapReady(true)}
+          onRegionChangeComplete={handleRegionChange}
           showsUserLocation={true}
           showsMyLocationButton={false}
           showsPointsOfInterest={false}
@@ -421,6 +495,9 @@ const MapScreen: React.FC = () => {
           showsTraffic={false}
           showsIndoors={false}
           onPress={() => setSelectedSpot(null)}
+          moveOnMarkerPress={false}
+          rotateEnabled={false}
+          pitchEnabled={false}
         >
           {/* User's current location circle */}
           <Circle
@@ -434,42 +511,15 @@ const MapScreen: React.FC = () => {
             strokeWidth={2}
           />
 
-          {/* Signal spots */}
-          {spots.map((spot) => {
-            const isSelected = selectedSpot?.id === spot.id;
-            const typeIcon = signalSpotService.getSpotTypeIcon(spot.type);
-            const typeColor = signalSpotService.getSpotTypeColor(spot.type);
-            
-            return (
-              <Marker
-                key={spot.id}
-                coordinate={{
-                  latitude: spot.latitude,
-                  longitude: spot.longitude,
-                }}
-                title={`${typeIcon} ${spot.title}`}
-                description={spot.content}
-                onPress={() => handleSpotPress(spot)}
-              >
-                <View style={[
-                  styles.spotMarker,
-                  { 
-                    backgroundColor: typeColor,
-                    borderColor: isSelected ? '#ffffff' : typeColor,
-                    borderWidth: isSelected ? 3 : 2,
-                    transform: [{ scale: isSelected ? 1.2 : 1 }],
-                  }
-                ]}>
-                  <Text style={styles.spotMarkerText}>{typeIcon}</Text>
-                </View>
-              </Marker>
-            );
-          })}
+          {/* Signal spots with clustering */}
+          {clusteredMarkers.map(renderSpotMarker)}
         </MapView>
 
         {/* Spot Counter */}
         <SpotCounter>
-          <SpotCounterText>{spots.length}개 스팟</SpotCounterText>
+          <SpotCounterText>
+            {visibleSpots.length}개 표시 / 전체 {spots.length}개
+          </SpotCounterText>
         </SpotCounter>
 
         {/* My Location Button */}
@@ -494,64 +544,13 @@ const MapScreen: React.FC = () => {
       </MapContainer>
 
       {/* Create Spot Modal */}
-      {showCreateModal && (
-        <CreateSpotModal>
-          <ModalTitle>새로운 시그널 스팟 만들기</ModalTitle>
-          
-          <SpotTypeSelector>
-            {spotTypes.map((type) => (
-              <SpotTypeButton
-                key={type.key}
-                selected={spotType === type.key}
-                onPress={() => setSpotType(type.key as typeof spotType)}
-              >
-                <SpotTypeText selected={spotType === type.key}>
-                  {type.label}
-                </SpotTypeText>
-              </SpotTypeButton>
-            ))}
-          </SpotTypeSelector>
-
-          <TextInput
-            placeholder="시그널 제목"
-            value={spotTitle}
-            onChangeText={setSpotTitle}
-            maxLength={100}
-            style={{ marginBottom: 10 }}
-          />
-          
-          <TextInput
-            placeholder="어떤 시그널을 남기고 싶나요?"
-            value={spotContent}
-            onChangeText={setSpotContent}
-            multiline
-            maxLength={500}
-          />
-          
-          <ButtonRow>
-            <Button 
-              variant="secondary" 
-              onPress={() => {
-                setShowCreateModal(false);
-                setSpotTitle('');
-                setSpotContent('');
-                setSpotType('social');
-              }}
-            >
-              <ButtonText variant="secondary">취소</ButtonText>
-            </Button>
-            <Button 
-              variant="primary" 
-              onPress={handleCreateSpot}
-              disabled={isLoadingCreate}
-            >
-              <ButtonText variant="primary">
-                {isLoadingCreate ? '생성 중...' : '만들기'}
-              </ButtonText>
-            </Button>
-          </ButtonRow>
-        </CreateSpotModal>
-      )}
+      <CreateSpotModal
+        visible={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onCreateSpot={handleCreateSpot}
+        currentLocation={location}
+        isLoading={isLoadingCreate}
+      />
     </Container>
   );
 };
@@ -607,6 +606,58 @@ const styles = StyleSheet.create({
   },
   myLocationIcon: {
     fontSize: 24,
+  },
+  clusterMarker: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#FF6B6B',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderColor: '#FFFFFF',
+    borderWidth: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  clusterText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+  },
+  calloutContainer: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 12,
+    minWidth: 200,
+    maxWidth: 250,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  calloutTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 4,
+  },
+  calloutContent: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 8,
+  },
+  calloutMeta: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  calloutMetaText: {
+    fontSize: 12,
+    color: '#999',
   },
 });
 

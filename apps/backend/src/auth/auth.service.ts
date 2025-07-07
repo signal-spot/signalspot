@@ -266,4 +266,70 @@ export class AuthService {
     const user = await this.em.findOne(User, { id: payload.sub });
     return user;
   }
+
+  async sendEmailVerification(userId: string): Promise<void> {
+    const user = await this.em.findOne(User, { id: userId });
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }
+
+    if (user.isEmailVerified) {
+      throw new BadRequestException('Email is already verified');
+    }
+
+    // Generate verification token (24 hours expiry)
+    const verificationToken = this.jwtService.sign(
+      { sub: user.id, type: 'email_verification' },
+      { expiresIn: '24h' }
+    );
+
+    // TODO: Send email with verification link
+    // For now, just log the token (in production, use proper email service)
+    console.log(`Email verification token for ${user.email}: ${verificationToken}`);
+    
+    // In production, you would send an email like:
+    // await this.emailService.sendVerificationEmail(user.email, verificationToken);
+  }
+
+  async verifyEmail(token: string): Promise<{ message: string }> {
+    try {
+      const payload = this.jwtService.verify(token);
+      
+      if (payload.type !== 'email_verification') {
+        throw new BadRequestException('Invalid verification token');
+      }
+
+      const user = await this.em.findOne(User, { id: payload.sub });
+      if (!user) {
+        throw new BadRequestException('User not found');
+      }
+
+      if (user.isEmailVerified) {
+        return { message: 'Email is already verified' };
+      }
+
+      user.isEmailVerified = true;
+      user.emailVerifiedAt = new Date();
+      await this.em.flush();
+
+      return { message: 'Email successfully verified' };
+    } catch (error) {
+      throw new BadRequestException('Invalid or expired verification token');
+    }
+  }
+
+  async resendEmailVerification(email: string): Promise<{ message: string }> {
+    const user = await this.em.findOne(User, { email });
+    if (!user) {
+      // Don't reveal if email exists for security
+      return { message: 'If the email exists, a verification link has been sent' };
+    }
+
+    if (user.isEmailVerified) {
+      throw new BadRequestException('Email is already verified');
+    }
+
+    await this.sendEmailVerification(user.id);
+    return { message: 'Verification email sent successfully' };
+  }
 } 

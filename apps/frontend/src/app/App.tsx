@@ -2,6 +2,7 @@ import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { StatusBar } from 'react-native';
 import { AuthProvider, useAuth } from '../providers/AuthProvider';
+import { ProfileProvider } from '../providers/ProfileProvider';
 import { QueryProvider } from '../providers/QueryProvider';
 import { LocationProvider } from '../providers/LocationProvider';
 import { RootNavigator } from '../navigation/RootNavigator';
@@ -27,9 +28,11 @@ export const App: React.FC = () => {
   return (
     <QueryProvider>
       <AuthProvider>
-        <LocationProvider>
-          <AppContent />
-        </LocationProvider>
+        <ProfileProvider>
+          <LocationProvider>
+            <AppContent />
+          </LocationProvider>
+        </ProfileProvider>
       </AuthProvider>
     </QueryProvider>
   );

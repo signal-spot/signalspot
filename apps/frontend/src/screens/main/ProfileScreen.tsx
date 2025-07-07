@@ -6,10 +6,13 @@ import {
   TouchableOpacity,
   Alert,
   ScrollView,
-  TextInput,
   Switch,
+  RefreshControl,
 } from 'react-native';
 import { useAuth } from '../../providers/AuthProvider';
+import { useProfile } from '../../providers/ProfileProvider';
+import ProfileEditModal from '../../components/profile/ProfileEditModal';
+import ProfileCompletionCard from '../../components/profile/ProfileCompletionCard';
 import styled from 'styled-components/native';
 
 // Styled components
@@ -183,41 +186,53 @@ const ModalButtonText = styled.Text<{ variant?: 'primary' | 'secondary' }>`
 
 const ProfileScreen: React.FC = () => {
   const { user, logout } = useAuth();
+  const {
+    profile,
+    analytics,
+    isLoading,
+    isUpdating,
+    profileCompletionPercentage,
+    refreshProfile,
+    updateProfile,
+    updateProfileSettings,
+    updateProfileVisibility,
+    getProfileAnalytics,
+    error,
+    clearError,
+  } = useProfile();
+
   const [showEditModal, setShowEditModal] = useState(false);
-  const [editForm, setEditForm] = useState({
-    nickname: '',
-    bio: '',
-    interests: '',
-  });
+  const [showAnalytics, setShowAnalytics] = useState(false);
   const [settings, setSettings] = useState({
-    notifications: true,
-    locationSharing: true,
-    privateProfile: false,
+    isPublicProfile: false,
+    allowMessagesFromStrangers: false,
+    showOnlineStatus: true,
+    showProfileViewers: true,
   });
 
   useEffect(() => {
-    if (user) {
-      setEditForm({
-        nickname: user.nickname || '',
-        bio: user.bio || '',
-        interests: user.interests || '',
+    if (profile) {
+      setSettings({
+        isPublicProfile: profile.isPublicProfile || false,
+        allowMessagesFromStrangers: profile.allowMessagesFromStrangers || false,
+        showOnlineStatus: profile.showOnlineStatus !== false,
+        showProfileViewers: profile.showProfileViewers !== false,
       });
     }
-  }, [user]);
+  }, [profile]);
+
+  useEffect(() => {
+    if (error) {
+      Alert.alert('오류', error, [{ text: '확인', onPress: clearError }]);
+    }
+  }, [error, clearError]);
 
   const handleEditProfile = () => {
     setShowEditModal(true);
   };
 
-  const handleSaveProfile = async () => {
-    try {
-      // TODO: Implement API call to update profile
-      Alert.alert('성공', '프로필이 업데이트되었습니다.');
-      setShowEditModal(false);
-    } catch (error) {
-      console.error('Error updating profile:', error);
-      Alert.alert('오류', '프로필 업데이트에 실패했습니다.');
-    }
+  const handleSaveProfile = async (data: any) => {
+    await updateProfile(data);
   };
 
   const handleLogout = () => {
@@ -231,97 +246,214 @@ const ProfileScreen: React.FC = () => {
     );
   };
 
-  const handleSettingToggle = (setting: keyof typeof settings) => {
+  const handleSettingToggle = async (setting: keyof typeof settings) => {
+    const newValue = !settings[setting];
+    
+    // Update local state immediately for better UX
     setSettings(prev => ({
       ...prev,
-      [setting]: !prev[setting],
+      [setting]: newValue,
     }));
+
+    try {
+      await updateProfileSettings({
+        [setting]: newValue,
+      });
+    } catch (error) {
+      // Revert on error
+      setSettings(prev => ({
+        ...prev,
+        [setting]: !newValue,
+      }));
+    }
   };
 
-  if (!user) {
+  const handleVisibilityChange = async (visibility: 'public' | 'friends' | 'private') => {
+    try {
+      await updateProfileVisibility(visibility);
+    } catch (error) {
+      // Error handling is done in the provider
+    }
+  };
+
+  const handleViewAnalytics = async () => {
+    if (!analytics) {
+      await getProfileAnalytics();
+    }
+    setShowAnalytics(true);
+  };
+
+  const onRefresh = async () => {
+    await refreshProfile();
+  };
+
+  if (!user || !profile) {
     return (
       <Container>
         <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>사용자 정보를 불러오는 중...</Text>
+          <Text style={styles.loadingText}>
+            {isLoading ? '프로필을 불러오는 중...' : '사용자 정보를 불러오는 중...'}
+          </Text>
         </View>
       </Container>
     );
   }
 
-  const getInitials = (name: string) => {
-    return name
-      .split(' ')
-      .map(word => word.charAt(0))
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
+  const getInitials = (firstName?: string, lastName?: string, fallback = 'U') => {
+    if (firstName && lastName) {
+      return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
+    } else if (firstName) {
+      return firstName.charAt(0).toUpperCase();
+    } else if (user?.email) {
+      return user.email.charAt(0).toUpperCase();
+    }
+    return fallback;
+  };
+
+  const getFullName = () => {
+    if (profile.firstName && profile.lastName) {
+      return `${profile.firstName} ${profile.lastName}`;
+    } else if (profile.firstName) {
+      return profile.firstName;
+    } else if (user?.username) {
+      return user.username;
+    }
+    return '사용자';
+  };
+
+  const getMissingFields = () => {
+    const missing = [];
+    if (!profile.bio) missing.push('bio');
+    if (!profile.interests || profile.interests.length === 0) missing.push('interests');
+    if (!profile.avatarUrl) missing.push('avatarUrl');
+    if (!profile.location) missing.push('location');
+    if (!profile.socialLinks || Object.keys(profile.socialLinks).length === 0) missing.push('socialLinks');
+    return missing;
   };
 
   return (
-    <Container>
+    <Container
+      refreshControl={
+        <RefreshControl refreshing={isLoading} onRefresh={onRefresh} />
+      }
+    >
       <HeaderContainer>
         <ProfileImage>
           <ProfileImageText>
-            {getInitials(user.nickname || user.email || 'U')}
+            {getInitials(profile.firstName, profile.lastName)}
           </ProfileImageText>
         </ProfileImage>
-        <UserName>{user.nickname || '사용자'}</UserName>
+        <UserName>{getFullName()}</UserName>
         <UserEmail>{user.email}</UserEmail>
-        <EditProfileButton onPress={handleEditProfile}>
-          <EditProfileButtonText>프로필 편집</EditProfileButtonText>
-        </EditProfileButton>
+        <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+          <EditProfileButton onPress={handleEditProfile}>
+            <EditProfileButtonText>프로필 편집</EditProfileButtonText>
+          </EditProfileButton>
+          <EditProfileButton onPress={handleViewAnalytics}>
+            <EditProfileButtonText>통계 보기</EditProfileButtonText>
+          </EditProfileButton>
+        </View>
       </HeaderContainer>
+
+      {/* Profile Completion Card */}
+      <ProfileCompletionCard
+        percentage={profileCompletionPercentage}
+        onEditProfile={handleEditProfile}
+        missingFields={getMissingFields()}
+      />
 
       <Section>
         <SectionTitle>프로필 정보</SectionTitle>
         <SettingRow>
-          <SettingLabel>닉네임</SettingLabel>
-          <SettingValue>{user.nickname || '설정 안함'}</SettingValue>
+          <SettingLabel>이름</SettingLabel>
+          <SettingValue>{getFullName()}</SettingValue>
         </SettingRow>
         <SettingRow>
           <SettingLabel>자기소개</SettingLabel>
-          <SettingValue>{user.bio || '설정 안함'}</SettingValue>
+          <SettingValue>{profile.bio || '설정 안함'}</SettingValue>
         </SettingRow>
         <SettingRow>
           <SettingLabel>관심사</SettingLabel>
-          <SettingValue>{user.interests || '설정 안함'}</SettingValue>
+          <SettingValue>
+            {profile.interests?.length ? profile.interests.join(', ') : '설정 안함'}
+          </SettingValue>
+        </SettingRow>
+        <SettingRow>
+          <SettingLabel>위치</SettingLabel>
+          <SettingValue>{profile.location || '설정 안함'}</SettingValue>
+        </SettingRow>
+        <SettingRow>
+          <SettingLabel>프로필 조회수</SettingLabel>
+          <SettingValue>{profile.profileViews || 0}회</SettingValue>
         </SettingRow>
         <SettingRow>
           <SettingLabel>가입일</SettingLabel>
           <SettingValue>
-            {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '알 수 없음'}
+            {profile.createdAt ? new Date(profile.createdAt).toLocaleDateString() : '알 수 없음'}
           </SettingValue>
         </SettingRow>
       </Section>
 
       <Section>
-        <SectionTitle>설정</SectionTitle>
+        <SectionTitle>프라이버시 설정</SectionTitle>
         <SettingRow>
-          <SettingLabel>푸시 알림</SettingLabel>
+          <SettingLabel>공개 프로필</SettingLabel>
           <Switch
-            value={settings.notifications}
-            onValueChange={() => handleSettingToggle('notifications')}
+            value={settings.isPublicProfile}
+            onValueChange={() => handleSettingToggle('isPublicProfile')}
             trackColor={{ false: '#767577', true: '#ff6b6b' }}
-            thumbColor={settings.notifications ? '#ffffff' : '#f4f3f4'}
+            thumbColor={settings.isPublicProfile ? '#ffffff' : '#f4f3f4'}
+            disabled={isUpdating}
           />
         </SettingRow>
         <SettingRow>
-          <SettingLabel>위치 공유</SettingLabel>
+          <SettingLabel>낯선 사람의 메시지 허용</SettingLabel>
           <Switch
-            value={settings.locationSharing}
-            onValueChange={() => handleSettingToggle('locationSharing')}
+            value={settings.allowMessagesFromStrangers}
+            onValueChange={() => handleSettingToggle('allowMessagesFromStrangers')}
             trackColor={{ false: '#767577', true: '#ff6b6b' }}
-            thumbColor={settings.locationSharing ? '#ffffff' : '#f4f3f4'}
+            thumbColor={settings.allowMessagesFromStrangers ? '#ffffff' : '#f4f3f4'}
+            disabled={isUpdating}
           />
         </SettingRow>
         <SettingRow>
-          <SettingLabel>비공개 프로필</SettingLabel>
+          <SettingLabel>온라인 상태 표시</SettingLabel>
           <Switch
-            value={settings.privateProfile}
-            onValueChange={() => handleSettingToggle('privateProfile')}
+            value={settings.showOnlineStatus}
+            onValueChange={() => handleSettingToggle('showOnlineStatus')}
             trackColor={{ false: '#767577', true: '#ff6b6b' }}
-            thumbColor={settings.privateProfile ? '#ffffff' : '#f4f3f4'}
+            thumbColor={settings.showOnlineStatus ? '#ffffff' : '#f4f3f4'}
+            disabled={isUpdating}
           />
+        </SettingRow>
+        <SettingRow>
+          <SettingLabel>프로필 방문자 표시</SettingLabel>
+          <Switch
+            value={settings.showProfileViewers}
+            onValueChange={() => handleSettingToggle('showProfileViewers')}
+            trackColor={{ false: '#767577', true: '#ff6b6b' }}
+            thumbColor={settings.showProfileViewers ? '#ffffff' : '#f4f3f4'}
+            disabled={isUpdating}
+          />
+        </SettingRow>
+      </Section>
+
+      <Section>
+        <SectionTitle>프로필 공개 범위</SectionTitle>
+        <SettingRow>
+          <TouchableOpacity onPress={() => handleVisibilityChange('public')}>
+            <SettingLabel>🌍 전체 공개</SettingLabel>
+          </TouchableOpacity>
+        </SettingRow>
+        <SettingRow>
+          <TouchableOpacity onPress={() => handleVisibilityChange('friends')}>
+            <SettingLabel>👥 친구만</SettingLabel>
+          </TouchableOpacity>
+        </SettingRow>
+        <SettingRow>
+          <TouchableOpacity onPress={() => handleVisibilityChange('private')}>
+            <SettingLabel>🔒 비공개</SettingLabel>
+          </TouchableOpacity>
         </SettingRow>
       </Section>
 
@@ -349,55 +481,16 @@ const ProfileScreen: React.FC = () => {
         <LogoutButtonText>로그아웃</LogoutButtonText>
       </LogoutButton>
 
-      {/* Edit Profile Modal */}
-      {showEditModal && (
-        <Modal>
-          <ModalContent>
-            <ModalTitle>프로필 편집</ModalTitle>
-            
-            <InputContainer>
-              <InputLabel>닉네임</InputLabel>
-              <Input
-                value={editForm.nickname}
-                onChangeText={(text) => setEditForm(prev => ({ ...prev, nickname: text }))}
-                placeholder="닉네임을 입력하세요"
-                maxLength={20}
-              />
-            </InputContainer>
-
-            <InputContainer>
-              <InputLabel>자기소개</InputLabel>
-              <Input
-                value={editForm.bio}
-                onChangeText={(text) => setEditForm(prev => ({ ...prev, bio: text }))}
-                placeholder="자기소개를 입력하세요"
-                multiline
-                numberOfLines={3}
-                maxLength={100}
-              />
-            </InputContainer>
-
-            <InputContainer>
-              <InputLabel>관심사</InputLabel>
-              <Input
-                value={editForm.interests}
-                onChangeText={(text) => setEditForm(prev => ({ ...prev, interests: text }))}
-                placeholder="관심사를 입력하세요 (쉼표로 구분)"
-                maxLength={50}
-              />
-            </InputContainer>
-
-            <ModalButtonRow>
-              <ModalButton variant="secondary" onPress={() => setShowEditModal(false)}>
-                <ModalButtonText variant="secondary">취소</ModalButtonText>
-              </ModalButton>
-              <ModalButton variant="primary" onPress={handleSaveProfile}>
-                <ModalButtonText variant="primary">저장</ModalButtonText>
-              </ModalButton>
-            </ModalButtonRow>
-          </ModalContent>
-        </Modal>
-      )}
+      {/* Profile Edit Modal */}
+      <ProfileEditModal
+        visible={showEditModal}
+        profile={profile}
+        onClose={() => setShowEditModal(false)}
+        onSave={handleSaveProfile}
+        onUploadAvatar={uploadAvatar}
+        onRemoveAvatar={removeAvatar}
+        isLoading={isUpdating}
+      />
     </Container>
   );
 };
