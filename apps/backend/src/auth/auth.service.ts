@@ -45,12 +45,12 @@ export interface AuthResponse {
   };
 }
 
-export interface LoginDto {
+export class LoginDto {
   email: string;
   password: string;
 }
 
-export interface RegisterDto {
+export class RegisterDto {
   email: string;
   password: string;
   username: string;

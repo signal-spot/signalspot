@@ -1,4 +1,4 @@
-import { Entity, PrimaryKey, Property, Index, ManyToOne, Ref, Collection, OneToMany } from '@mikro-orm/core';
+import { Entity, PrimaryKey, Property, Index, ManyToOne, Ref, Collection, OneToMany, Reference } from '@mikro-orm/core';
 import { v4 } from 'uuid';
 import { User } from './user.entity';
 import { Location } from './location.entity';
@@ -350,10 +350,10 @@ export class SignalSpot extends AggregateRoot {
   longitude: number;
 
   @Property({ type: 'integer', default: 100 })
-  radiusInMeters: number = 100;
+  radiusInMeters = 100;
 
   @Property({ type: 'integer', default: 24 })
-  durationInHours: number = 24;
+  durationInHours = 24;
 
   @Property({ type: 'string', default: SpotStatus.ACTIVE })
   @Index()
@@ -371,28 +371,28 @@ export class SignalSpot extends AggregateRoot {
   tags?: string[];
 
   @Property({ type: 'integer', default: 0 })
-  viewCount: number = 0;
+  viewCount = 0;
 
   @Property({ type: 'integer', default: 0 })
-  likeCount: number = 0;
+  likeCount = 0;
 
   @Property({ type: 'integer', default: 0 })
-  dislikeCount: number = 0;
+  dislikeCount = 0;
 
   @Property({ type: 'integer', default: 0 })
-  replyCount: number = 0;
+  replyCount = 0;
 
   @Property({ type: 'integer', default: 0 })
-  shareCount: number = 0;
+  shareCount = 0;
 
   @Property({ type: 'integer', default: 0 })
-  reportCount: number = 0;
+  reportCount = 0;
 
   @Property({ type: 'boolean', default: true })
-  isActive: boolean = true;
+  isActive = true;
 
   @Property({ type: 'boolean', default: false })
-  isPinned: boolean = false;
+  isPinned = false;
 
   @Property({ type: 'json', nullable: true })
   metadata?: Record<string, any>;
@@ -442,7 +442,7 @@ export class SignalSpot extends AggregateRoot {
       throw new Error('User cannot create SignalSpot');
     }
     
-    spot.creator = data.creator;
+    spot.creator = Reference.create(data.creator);
     spot.message = content.message;
     spot.title = content.title;
     spot.latitude = coordinates.latitude;
@@ -752,7 +752,7 @@ export class SignalSpot extends AggregateRoot {
     return spotLocation.isWithinRadius(userLocation, this.radiusInMeters / 1000);
   }
 
-  public isNearExpiration(minutesThreshold: number = 60): boolean {
+  public isNearExpiration(minutesThreshold = 60): boolean {
     const now = new Date();
     const timeUntilExpiration = this.expiresAt.getTime() - now.getTime();
     return timeUntilExpiration <= (minutesThreshold * 60 * 1000);

@@ -47,7 +47,7 @@ export class SpotContent {
     return this.description;
   }
 
-  getPreview(maxLength: number = 50): string {
+  getPreview(maxLength = 50): string {
     return this.description.length > maxLength 
       ? this.description.substring(0, maxLength) + '...'
       : this.description;

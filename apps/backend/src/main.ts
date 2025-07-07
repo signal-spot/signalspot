@@ -7,6 +7,7 @@ import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
+import helmet from 'helmet';
 import { AppModule } from './app/app.module';
 
 async function bootstrap() {
@@ -15,14 +16,35 @@ async function bootstrap() {
   // Get configuration service
   const configService = app.get(ConfigService);
   
+  // Security middleware
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        scriptSrc: ["'self'"],
+        imgSrc: ["'self'", "data:", "https:"],
+      },
+    },
+    crossOriginEmbedderPolicy: false,
+  }));
+  
   // Global prefix
   const globalPrefix = 'api';
   app.setGlobalPrefix(globalPrefix);
   
   // CORS configuration
+  const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [
+    process.env.FRONTEND_URL || 'http://localhost:8080'
+  ];
+  
   app.enableCors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:8080',
+    origin: configService.get('NODE_ENV') === 'production' 
+      ? allowedOrigins 
+      : true,
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
   });
   
   // Global validation pipe
@@ -61,12 +83,37 @@ async function bootstrap() {
   }
   
   // 헬스체크 엔드포인트
-  app.use('/health', (req, res) => {
-    res.status(200).json({
-      status: 'ok',
-      timestamp: new Date().toISOString(),
-      uptime: process.uptime(),
-    });
+  app.use('/health', async (req, res) => {
+    try {
+      // 데이터베이스 연결 확인
+      const em = app.get('MikroORM').em.fork();
+      await em.execute('SELECT 1');
+      
+      res.status(200).json({
+        status: 'healthy',
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+        version: '2.0.0',
+        environment: configService.get('NODE_ENV'),
+        services: {
+          database: 'healthy',
+          api: 'healthy'
+        }
+      });
+    } catch (error) {
+      res.status(503).json({
+        status: 'unhealthy',
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+        version: '2.0.0',
+        environment: configService.get('NODE_ENV'),
+        services: {
+          database: 'unhealthy',
+          api: 'healthy'
+        },
+        error: error.message
+      });
+    }
   });
   
   // Start server

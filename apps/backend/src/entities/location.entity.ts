@@ -1,4 +1,4 @@
-import { Entity, PrimaryKey, Property, Index, ManyToOne, Ref } from '@mikro-orm/core';
+import { Entity, PrimaryKey, Property, Index, ManyToOne, Ref, Reference } from '@mikro-orm/core';
 import { v4 } from 'uuid';
 import { User } from './user.entity';
 
@@ -191,10 +191,10 @@ export class Location {
   postalCode?: string;
 
   @Property({ type: 'boolean', default: true })
-  isActive: boolean = true;
+  isActive = true;
 
   @Property({ type: 'boolean', default: false })
-  isCurrentLocation: boolean = false;
+  isCurrentLocation = false;
 
   @Property({ type: 'json', nullable: true })
   metadata?: Record<string, any>;
@@ -235,7 +235,7 @@ export class Location {
     // Validate coordinates using value object
     const coordinates = Coordinates.create(data.latitude, data.longitude);
     
-    location.user = data.user;
+    location.user = Reference.create(data.user);
     location.latitude = coordinates.latitude;
     location.longitude = coordinates.longitude;
     location.altitude = data.altitude;
@@ -324,7 +324,7 @@ export class Location {
     return this.accuracyLevel === LocationAccuracy.HIGH;
   }
 
-  public isRecent(minutesThreshold: number = 10): boolean {
+  public isRecent(minutesThreshold = 10): boolean {
     const now = new Date();
     const diffMinutes = (now.getTime() - this.createdAt.getTime()) / (1000 * 60);
     return diffMinutes <= minutesThreshold;

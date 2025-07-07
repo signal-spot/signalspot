@@ -1,4 +1,5 @@
 import { Id } from '../../shared/value-objects/id.value-object';
+import { v4 as uuidv4 } from 'uuid';
 
 export class UserId extends Id {
   private constructor(value: string) {
@@ -10,6 +11,6 @@ export class UserId extends Id {
   }
 
   static generate(): UserId {
-    return new UserId(super.generate());
+    return new UserId(uuidv4());
   }
 }

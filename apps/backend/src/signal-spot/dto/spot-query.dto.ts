@@ -3,15 +3,13 @@ import {
   IsNumber, 
   IsString, 
   IsEnum, 
-  IsArray,
   IsBoolean,
   Min, 
   Max,
   IsLatitude,
-  IsLongitude,
-  Transform
+  IsLongitude
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { SpotVisibility, SpotType } from '../../entities/signal-spot.entity';
 

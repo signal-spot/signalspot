@@ -1,4 +1,5 @@
 import { Id } from '../../shared/value-objects/id.value-object';
+import { v4 as uuidv4 } from 'uuid';
 
 export class SpotId extends Id {
   private constructor(value: string) {
@@ -10,6 +11,6 @@ export class SpotId extends Id {
   }
 
   static generate(): SpotId {
-    return new SpotId(super.generate());
+    return new SpotId(uuidv4());
   }
 }

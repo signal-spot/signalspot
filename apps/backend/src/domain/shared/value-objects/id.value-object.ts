@@ -1,4 +1,4 @@
-import { v4 as uuidv4 } from 'uuid';
+import { v4 as generateUuid } from 'uuid';
 
 export abstract class Id {
   protected readonly value: string;
@@ -10,8 +10,8 @@ export abstract class Id {
     this.value = value;
   }
 
-  static generate(): string {
-    return uuidv4();
+  static generate(): Id {
+    throw new Error('generate() must be implemented by subclasses');
   }
 
   equals(other: Id): boolean {

@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Inject } from '@nestjs/common';
+import { EntityManager } from '@mikro-orm/core';
 import { SignalSpot, SpotStatus, SpotVisibility, SpotType } from '../entities/signal-spot.entity';
-import { ISignalSpotRepository } from '../repositories/signal-spot.repository';
+import { ISignalSpotRepository, SIGNAL_SPOT_REPOSITORY_TOKEN } from '../repositories/signal-spot.repository';
 import { User } from '../entities/user.entity';
 import { Coordinates } from '../entities/location.entity';
 
@@ -8,7 +9,9 @@ import { Coordinates } from '../entities/location.entity';
 @Injectable()
 export class SignalSpotDomainService {
   constructor(
-    private readonly signalSpotRepository: ISignalSpotRepository
+    @Inject(SIGNAL_SPOT_REPOSITORY_TOKEN)
+    private readonly signalSpotRepository: ISignalSpotRepository,
+    private readonly em: EntityManager
   ) {}
 
   // Business Logic: Create SignalSpot with validation
@@ -48,7 +51,7 @@ export class SignalSpotDomainService {
   async findSpotsForUser(
     user: User,
     coordinates: Coordinates,
-    radiusKm: number = 1,
+    radiusKm = 1,
     options: {
       limit?: number;
       offset?: number;
@@ -124,13 +127,27 @@ export class SignalSpotDomainService {
 
   // Business Logic: Expire spots that have reached their time limit
   async expireSpots(): Promise<number> {
-    const expiredSpots = await this.signalSpotRepository.findExpired();
+    const em = this.em.fork();
+    const repository = em.getRepository(SignalSpot);
+    
+    const expiredSpots = await repository.find({
+      $or: [
+        { expiresAt: { $lt: new Date() } },
+        { status: SpotStatus.EXPIRED }
+      ],
+      isActive: true
+    }, {
+      populate: ['creator'],
+      orderBy: { expiresAt: 'DESC' },
+      limit: 100
+    });
+    
     let expiredCount = 0;
 
     for (const spot of expiredSpots) {
       if (spot.isExpired() && spot.status !== SpotStatus.EXPIRED) {
         spot.expire();
-        await this.signalSpotRepository.save(spot);
+        await em.persistAndFlush(spot);
         expiredCount++;
       }
     }
@@ -139,7 +156,7 @@ export class SignalSpotDomainService {
   }
 
   // Business Logic: Clean up old expired spots
-  async cleanupExpiredSpots(olderThanHours: number = 168): Promise<number> {
+  async cleanupExpiredSpots(olderThanHours = 168): Promise<number> {
     return await this.signalSpotRepository.removeExpired(olderThanHours);
   }
 
@@ -147,14 +164,26 @@ export class SignalSpotDomainService {
   async findTrendingSpots(
     coordinates?: Coordinates,
     radiusKm?: number,
-    limit: number = 10
+    limit = 10
   ): Promise<SignalSpot[]> {
     return await this.signalSpotRepository.findTrending(coordinates, radiusKm, limit);
   }
 
   // Business Logic: Find spots that need attention (expiring soon)
-  async findSpotsNeedingAttention(minutesThreshold: number = 60): Promise<SignalSpot[]> {
-    return await this.signalSpotRepository.findExpiring(minutesThreshold);
+  async findSpotsNeedingAttention(minutesThreshold = 60): Promise<SignalSpot[]> {
+    const em = this.em.fork();
+    const repository = em.getRepository(SignalSpot);
+    const thresholdDate = new Date(Date.now() + (minutesThreshold * 60 * 1000));
+    
+    return await repository.find({
+      isActive: true,
+      status: SpotStatus.ACTIVE,
+      expiresAt: { $gte: new Date(), $lte: thresholdDate }
+    }, {
+      populate: ['creator'],
+      orderBy: { expiresAt: 'ASC' },
+      limit: 50
+    });
   }
 
   // Business Logic: Calculate user's spot statistics
@@ -191,7 +220,7 @@ export class SignalSpotDomainService {
   // Business Logic: Check if location has too many spots (spam prevention)
   async checkLocationSpotDensity(
     coordinates: Coordinates,
-    radiusKm: number = 0.1
+    radiusKm = 0.1
   ): Promise<{
     spotCount: number;
     isOvercrowded: boolean;
@@ -210,8 +239,8 @@ export class SignalSpotDomainService {
   // Business Logic: Find spots by content similarity
   async findSimilarSpots(
     spot: SignalSpot,
-    radiusKm: number = 1,
-    limit: number = 5
+    radiusKm = 1,
+    limit = 5
   ): Promise<SignalSpot[]> {
     const coordinates = spot.getCoordinates();
     const tags = spot.getTags();
@@ -331,6 +360,7 @@ export class SignalSpotDomainService {
 @Injectable()
 export class SignalSpotEventHandler {
   constructor(
+    @Inject(SIGNAL_SPOT_REPOSITORY_TOKEN)
     private readonly signalSpotRepository: ISignalSpotRepository
   ) {}
 

@@ -28,8 +28,6 @@ import {
   ApiParam,
   ApiQuery,
   ApiBody,
-  ApiConsumes,
-  ApiProduces
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { VerifiedUserGuard } from '../auth/guards/verified-user.guard';
@@ -44,7 +42,6 @@ import {
   CreateSpotDto,
   UpdateSpotDto,
   SpotInteractionDto,
-  SpotResponseDto,
   SpotListResponseDto,
   SpotSingleResponseDto,
   LocationQueryDto,
@@ -56,7 +53,6 @@ import {
   ExtendDurationDto,
   AdminReportQueryDto,
   AdminExpiringQueryDto,
-  AdminActionDto,
   AdminStatsResponseDto,
   SpotInteractionResponseDto
 } from './dto';
@@ -638,9 +634,9 @@ export class SignalSpotController {
   @ApiResponse({ status: 500, description: 'Internal server error' })
   async getSimilarSpots(
     @Param('id', ParseUUIDPipe) id: string,
+    @GetUser() user: User,
     @Query('radiusKm') radiusKm?: number,
-    @Query('limit') limit?: number,
-    @GetUser() user: User
+    @Query('limit') limit?: number
   ): Promise<SpotListResponseDto> {
     try {
       this.logger.log(`Getting similar spots to ${id} for user ${user.id}`);

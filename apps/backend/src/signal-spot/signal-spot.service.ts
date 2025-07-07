@@ -1,6 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Inject } from '@nestjs/common';
 import { SignalSpot, SpotId, SpotStatus, SpotVisibility, SpotType } from '../entities/signal-spot.entity';
-import { ISignalSpotRepository } from '../repositories/signal-spot.repository';
+import { ISignalSpotRepository, SIGNAL_SPOT_REPOSITORY_TOKEN } from '../repositories/signal-spot.repository';
 import { SignalSpotDomainService } from '../domain/signal-spot.domain-service';
 import { User } from '../entities/user.entity';
 import { Coordinates } from '../entities/location.entity';
@@ -49,6 +49,7 @@ export interface SpotInteractionDto {
 @Injectable()
 export class SignalSpotService {
   constructor(
+    @Inject(SIGNAL_SPOT_REPOSITORY_TOKEN)
     private readonly signalSpotRepository: ISignalSpotRepository,
     private readonly signalSpotDomainService: SignalSpotDomainService
   ) {}
@@ -322,8 +323,8 @@ export class SignalSpotService {
   async getLocationStatistics(
     latitude: number,
     longitude: number,
-    radiusKm: number = 1
-  ): Promise<any> {
+    radiusKm = 1
+  ): Promise<{ spotCount: number; density: number; averageSignalStrength?: number }> {
     const coordinates = Coordinates.create(latitude, longitude);
     
     const [spotCount, density] = await Promise.all([
@@ -332,9 +333,9 @@ export class SignalSpotService {
     ]);
 
     return {
-      totalSpots: spotCount,
-      density: density,
-      radiusKm: radiusKm
+      spotCount: spotCount,
+      density: density.isOvercrowded ? 1 : 0,
+      averageSignalStrength: density.maxAllowed
     };
   }
 
@@ -460,7 +461,7 @@ export class SignalSpotService {
     return await this.signalSpotDomainService.expireSpots();
   }
 
-  async cleanupExpiredSpots(olderThanHours: number = 168): Promise<number> {
+  async cleanupExpiredSpots(olderThanHours = 168): Promise<number> {
     return await this.signalSpotDomainService.cleanupExpiredSpots(olderThanHours);
   }
 
@@ -475,7 +476,7 @@ export class SignalSpotService {
 
   async getSpotsNeedingAttention(
     user: User,
-    minutesThreshold: number = 60
+    minutesThreshold = 60
   ): Promise<SignalSpot[]> {
     // Only verified users can see spots needing attention
     if (!user.isVerified) {

@@ -3,6 +3,8 @@ import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
+import { Express } from 'express';
+import 'multer';
 
 export interface FileUploadResult {
   url: string;
@@ -55,7 +57,7 @@ export class FileUploadService {
   async uploadFile(
     file: Express.Multer.File,
     options: FileValidationOptions = {},
-    folder: string = 'general'
+    folder = 'general'
   ): Promise<FileUploadResult> {
     // Validate file
     this.validateFile(file, options);
@@ -161,7 +163,7 @@ export class FileUploadService {
    */
   private async processImage(
     file: Express.Multer.File,
-    options: ImageProcessingOptions
+    _options: ImageProcessingOptions
   ): Promise<Express.Multer.File> {
     // For now, return the original file
     // In a real implementation, you would use a library like sharp or jimp

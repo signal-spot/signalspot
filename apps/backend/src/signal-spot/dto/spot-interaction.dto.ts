@@ -10,7 +10,7 @@ import {
   ValidateIf
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { SpotInteractionType } from '../../entities/signal-spot.entity';
+// import { SpotInteractionType } from '../../entities/signal-spot.entity';
 
 export class SpotInteractionDto {
   @ApiProperty({
@@ -87,7 +87,7 @@ export class SpotInteractionResponseDto {
 
   @ApiProperty({
     description: 'Updated spot data after interaction',
-    type: 'object'
+    type: () => Object
   })
   data: any;
 }

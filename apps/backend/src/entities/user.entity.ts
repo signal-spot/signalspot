@@ -353,25 +353,25 @@ export class User extends AggregateRoot {
   languages?: string[];
 
   @Property({ type: 'boolean', default: false })
-  isPublicProfile: boolean = false;
+  isPublicProfile = false;
 
   @Property({ type: 'boolean', default: false })
-  allowMessagesFromStrangers: boolean = false;
+  allowMessagesFromStrangers = false;
 
   @Property({ type: 'boolean', default: true })
-  showOnlineStatus: boolean = true;
+  showOnlineStatus = true;
 
   @Property({ type: 'boolean', default: true })
-  showProfileViewers: boolean = true;
+  showProfileViewers = true;
 
   @Property({ type: 'number', default: 0 })
-  profileViews: number = 0;
+  profileViews = 0;
 
   @Property({ type: 'date', nullable: true })
   lastProfileUpdateAt?: Date;
 
   @Property({ type: 'number', default: 0 })
-  profileCompletionPercentage: number = 0;
+  profileCompletionPercentage = 0;
 
   @Property({ type: 'json', nullable: true })
   profileAnalytics?: {
@@ -384,7 +384,7 @@ export class User extends AggregateRoot {
   };
 
   @Property({ type: 'boolean', default: true })
-  isActive: boolean = true;
+  isActive = true;
 
   @Property({ type: 'string', default: UserStatus.PENDING_VERIFICATION })
   status: UserStatus = UserStatus.PENDING_VERIFICATION;
@@ -398,10 +398,10 @@ export class User extends AggregateRoot {
 
   // Location-related properties
   @Property({ type: 'boolean', default: false })
-  locationTrackingEnabled: boolean = false;
+  locationTrackingEnabled = false;
 
   @Property({ type: 'string', default: 'private' })
-  locationPrivacy: string = 'private'; // 'public', 'friends', 'private'
+  locationPrivacy = 'private'; // 'public', 'friends', 'private'
 
   @Property({ type: 'double', nullable: true })
   @Index()
@@ -430,16 +430,16 @@ export class User extends AggregateRoot {
   };
 
   @Property({ type: 'number', default: 0 })
-  reportedCount: number = 0;
+  reportedCount = 0;
 
   @Property({ default: false })
-  isEmailVerified: boolean = false;
+  isEmailVerified = false;
 
   @Property({ default: 0 })
-  loginAttempts: number = 0;
+  loginAttempts = 0;
 
   @Property({ default: false })
-  accountLocked: boolean = false;
+  accountLocked = false;
 
   @Property({ nullable: true })
   lockedUntil?: Date;
@@ -711,7 +711,7 @@ export class User extends AggregateRoot {
     return false;
   }
 
-  public hasRecentLocation(minutesThreshold: number = 30): boolean {
+  public hasRecentLocation(minutesThreshold = 30): boolean {
     if (!this.lastLocationUpdateAt) return false;
     
     const now = new Date();

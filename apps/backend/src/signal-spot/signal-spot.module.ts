@@ -6,7 +6,7 @@ import { SignalSpot } from '../entities/signal-spot.entity';
 import { SignalSpotService } from './signal-spot.service';
 import { SignalSpotController } from './signal-spot.controller';
 import { SignalSpotScheduler } from './signal-spot.scheduler';
-import { SignalSpotRepository, ISignalSpotRepository } from '../repositories/signal-spot.repository';
+import { SignalSpotRepository, SIGNAL_SPOT_REPOSITORY_TOKEN } from '../repositories/signal-spot.repository';
 import { SignalSpotDomainService, SignalSpotEventHandler } from '../domain/signal-spot.domain-service';
 import { User } from '../entities/user.entity';
 import { Location } from '../entities/location.entity';
@@ -23,7 +23,7 @@ import { Location } from '../entities/location.entity';
     SignalSpotEventHandler,
     SignalSpotScheduler,
     {
-      provide: ISignalSpotRepository,
+      provide: SIGNAL_SPOT_REPOSITORY_TOKEN,
       useClass: SignalSpotRepository
     }
   ],
@@ -31,7 +31,7 @@ import { Location } from '../entities/location.entity';
   exports: [
     SignalSpotService,
     SignalSpotDomainService,
-    ISignalSpotRepository
+    SIGNAL_SPOT_REPOSITORY_TOKEN
   ]
 })
 export class SignalSpotModule {}

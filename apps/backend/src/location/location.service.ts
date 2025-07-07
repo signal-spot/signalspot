@@ -173,7 +173,7 @@ export class LocationService {
   /**
    * Get user's location history
    */
-  async getLocationHistory(userId: string, limit: number = 50, offset: number = 0): Promise<Location[]> {
+  async getLocationHistory(userId: string, limit = 50, offset = 0): Promise<Location[]> {
     this.logger.log(`Getting location history for user ${userId}`);
 
     const locations = await this.locationRepository.find(
@@ -190,63 +190,46 @@ export class LocationService {
   async findNearbyLocations(query: LocationQuery): Promise<Location[]> {
     this.logger.log(`Finding nearby locations within ${query.radius}km of ${query.latitude}, ${query.longitude}`);
 
-    const qb = this.locationRepository.createQueryBuilder('l');
-    
-    // Calculate distance using Haversine formula
-    qb.select('l.*')
-      .addSelect(`(
-        6371 * acos(
-          cos(radians(${query.latitude})) * 
-          cos(radians(l.latitude)) * 
-          cos(radians(l.longitude) - radians(${query.longitude})) + 
-          sin(radians(${query.latitude})) * 
-          sin(radians(l.latitude))
-        )
-      ) as distance`)
-      .where('l.is_active = ?', [true])
-      .andWhere(`(
-        6371 * acos(
-          cos(radians(${query.latitude})) * 
-          cos(radians(l.latitude)) * 
-          cos(radians(l.longitude) - radians(${query.longitude})) + 
-          sin(radians(${query.latitude})) * 
-          sin(radians(l.latitude))
-        )
-      ) <= ?`, [query.radius]);
+    // Use repository find with in-memory filtering for distance
+    const allLocations = await this.locationRepository.find(
+      { isActive: true },
+      { populate: ['user'] }
+    );
 
-    if (query.privacy) {
-      qb.andWhere('l.privacy = ?', [query.privacy]);
-    }
+    // Filter by distance
+    const nearbyLocations = allLocations.filter(location => {
+      const distance = this.calculateDistance(
+        query.latitude,
+        query.longitude,
+        location.latitude,
+        location.longitude
+      );
+      return distance <= query.radius;
+    });
 
-    if (query.accuracyLevel) {
-      qb.andWhere('l.accuracy_level = ?', [query.accuracyLevel]);
-    }
+    // Sort by distance
+    nearbyLocations.sort((a, b) => {
+      const distA = this.calculateDistance(
+        query.latitude,
+        query.longitude,
+        a.latitude,
+        a.longitude
+      );
+      const distB = this.calculateDistance(
+        query.latitude,
+        query.longitude,
+        b.latitude,
+        b.longitude
+      );
+      return distA - distB;
+    });
 
-    if (query.source) {
-      qb.andWhere('l.source = ?', [query.source]);
-    }
-
-    if (query.createdAfter) {
-      qb.andWhere('l.created_at >= ?', [query.createdAfter]);
-    }
-
-    if (query.createdBefore) {
-      qb.andWhere('l.created_at <= ?', [query.createdBefore]);
-    }
-
-    qb.orderBy('distance', 'ASC');
-
-    if (query.limit) {
-      qb.limit(query.limit);
-    }
-
-    if (query.offset) {
-      qb.offset(query.offset);
-    }
-
-    const locations = await qb.getResult();
-    return locations;
+    // Apply limit and offset
+    const offset = query.offset || 0;
+    const limit = query.limit || 50;
+    return nearbyLocations.slice(offset, offset + limit);
   }
+
 
   /**
    * Find nearby users within a specified radius
@@ -254,52 +237,59 @@ export class LocationService {
   async findNearbyUsers(query: NearbyUsersQuery): Promise<User[]> {
     this.logger.log(`Finding nearby users within ${query.radius}km of ${query.latitude}, ${query.longitude}`);
 
-    const qb = this.userRepository.createQueryBuilder('u');
-    
-    qb.select('u.*')
-      .addSelect(`(
-        6371 * acos(
-          cos(radians(${query.latitude})) * 
-          cos(radians(u.last_known_latitude)) * 
-          cos(radians(u.last_known_longitude) - radians(${query.longitude})) + 
-          sin(radians(${query.latitude})) * 
-          sin(radians(u.last_known_latitude))
-        )
-      ) as distance`)
-      .where('u.last_known_latitude IS NOT NULL')
-      .andWhere('u.last_known_longitude IS NOT NULL')
-      .andWhere('u.location_tracking_enabled = ?', [true])
-      .andWhere('u.is_active = ?', [true])
-      .andWhere(`(
-        6371 * acos(
-          cos(radians(${query.latitude})) * 
-          cos(radians(u.last_known_latitude)) * 
-          cos(radians(u.last_known_longitude) - radians(${query.longitude})) + 
-          sin(radians(${query.latitude})) * 
-          sin(radians(u.last_known_latitude))
-        )
-      ) <= ?`, [query.radius]);
+    // Find users with location data
+    const conditions: any = {
+      lastKnownLatitude: { $ne: null },
+      lastKnownLongitude: { $ne: null },
+      locationTrackingEnabled: true,
+      isActive: true
+    };
 
     if (query.excludeUserId) {
-      qb.andWhere('u.id != ?', [query.excludeUserId]);
+      conditions.id = { $ne: query.excludeUserId };
     }
 
     if (query.locationPrivacy) {
-      qb.andWhere('u.location_privacy = ?', [query.locationPrivacy]);
+      conditions.locationPrivacy = query.locationPrivacy;
     }
 
-    qb.orderBy('distance', 'ASC');
+    const allUsers = await this.userRepository.find(conditions);
 
-    if (query.limit) {
-      qb.limit(query.limit);
-    }
+    // Filter by distance
+    const nearbyUsers = allUsers.filter(user => {
+      if (!user.lastKnownLatitude || !user.lastKnownLongitude) {
+        return false;
+      }
+      const distance = this.calculateDistance(
+        query.latitude,
+        query.longitude,
+        user.lastKnownLatitude,
+        user.lastKnownLongitude
+      );
+      return distance <= query.radius;
+    });
 
-    if (query.offset) {
-      qb.offset(query.offset);
-    }
+    // Sort by distance
+    nearbyUsers.sort((a, b) => {
+      const distA = this.calculateDistance(
+        query.latitude,
+        query.longitude,
+        a.lastKnownLatitude!,
+        a.lastKnownLongitude!
+      );
+      const distB = this.calculateDistance(
+        query.latitude,
+        query.longitude,
+        b.lastKnownLatitude!,
+        b.lastKnownLongitude!
+      );
+      return distA - distB;
+    });
 
-    const users = await qb.getResult();
-    return users;
+    // Apply pagination
+    const offset = query.offset || 0;
+    const limit = query.limit || 50;
+    return nearbyUsers.slice(offset, offset + limit);
   }
 
   /**
@@ -391,22 +381,26 @@ export class LocationService {
   /**
    * Clean up old location records
    */
-  async cleanupOldLocations(olderThanDays: number = 30): Promise<number> {
+  async cleanupOldLocations(olderThanDays = 30): Promise<number> {
     this.logger.log(`Cleaning up location records older than ${olderThanDays} days`);
 
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - olderThanDays);
 
-    const qb = this.locationRepository.createQueryBuilder('l');
-    const result = await qb
-      .delete()
-      .where('l.created_at < ?', [cutoffDate])
-      .andWhere('l.is_current_location = ?', [false])
-      .execute();
+    // Find old locations
+    const oldLocations = await this.locationRepository.find({
+      createdAt: { $lt: cutoffDate },
+      isCurrentLocation: false
+    });
 
-    this.logger.log(`Cleaned up ${result.affectedRows} old location records`);
-    return result.affectedRows || 0;
+    if (oldLocations.length > 0) {
+      await this.em.removeAndFlush(oldLocations);
+    }
+
+    this.logger.log(`Cleaned up ${oldLocations.length} old location records`);
+    return oldLocations.length;
   }
+
 
   /**
    * Get location statistics for a user
@@ -482,5 +476,23 @@ export class LocationService {
     }
 
     return this.getCurrentLocation(targetUserId);
+  }
+
+  /**
+   * Find a user's location by ID
+   */
+  async findUserLocation(locationId: string, user: User): Promise<Location | null> {
+    return await this.locationRepository.findOne({
+      id: locationId,
+      user: user.id,
+    });
+  }
+
+  /**
+   * Activate a location
+   */
+  async activateLocation(location: Location): Promise<void> {
+    location.activate();
+    await this.em.flush();
   }
 }

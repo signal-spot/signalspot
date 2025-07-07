@@ -13,6 +13,7 @@ import {
   ParseUUIDPipe,
   ValidationPipe,
   Logger,
+  NotFoundException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { IsNumber, IsOptional, IsString, IsBoolean, IsEnum, IsDateString, Min, Max } from 'class-validator';
@@ -323,8 +324,8 @@ export class LocationController {
   @ApiQuery({ name: 'offset', required: false, type: 'number' })
   async getLocationHistory(
     @GetUser() user: User,
-    @Query('limit') limit: number = 50,
-    @Query('offset') offset: number = 0,
+    @Query('limit') limit = 50,
+    @Query('offset') offset = 0,
   ): Promise<Location[]> {
     this.logger.log(`Getting location history for user ${user.id}`);
     return this.locationService.getLocationHistory(user.id, limit, offset);
@@ -479,17 +480,13 @@ export class LocationController {
     @Param('id', ParseUUIDPipe) locationId: string,
   ): Promise<Location> {
     this.logger.log(`Activating location ${locationId} for user ${user.id}`);
-    const location = await this.locationService.locationRepository.findOne({
-      id: locationId,
-      user: user.id,
-    });
+    const location = await this.locationService.findUserLocation(locationId, user);
     
     if (!location) {
       throw new NotFoundException('Location not found');
     }
     
-    location.activate();
-    await this.locationService.em.flush();
+    await this.locationService.activateLocation(location);
     
     return location;
   }

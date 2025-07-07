@@ -1,9 +1,12 @@
 import { Injectable } from '@nestjs/common';
-import { EntityRepository, FindOptions, QueryBuilder } from '@mikro-orm/core';
+import { EntityRepository, EntityManager } from '@mikro-orm/core';
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { SignalSpot, SpotId, SpotStatus, SpotVisibility, SpotType } from '../entities/signal-spot.entity';
 import { User } from '../entities/user.entity';
 import { Coordinates } from '../entities/location.entity';
+
+// Domain Repository Interface Token
+export const SIGNAL_SPOT_REPOSITORY_TOKEN = 'ISignalSpotRepository';
 
 // Domain Repository Interface
 export interface ISignalSpotRepository {
@@ -119,7 +122,8 @@ export interface ISignalSpotRepository {
 export class SignalSpotRepository implements ISignalSpotRepository {
   constructor(
     @InjectRepository(SignalSpot)
-    private readonly repository: EntityRepository<SignalSpot>
+    private readonly repository: EntityRepository<SignalSpot>,
+    private readonly em: EntityManager
   ) {}
 
   async findById(id: SpotId): Promise<SignalSpot | null> {
@@ -137,12 +141,12 @@ export class SignalSpotRepository implements ISignalSpotRepository {
   }
 
   async save(spot: SignalSpot): Promise<SignalSpot> {
-    await this.repository.persistAndFlush(spot);
+    await this.em.persistAndFlush(spot);
     return spot;
   }
 
   async remove(spot: SignalSpot): Promise<void> {
-    await this.repository.removeAndFlush(spot);
+    await this.em.removeAndFlush(spot);
   }
 
   async findNearby(
@@ -157,51 +161,71 @@ export class SignalSpotRepository implements ISignalSpotRepository {
       excludeExpired?: boolean;
     } = {}
   ): Promise<SignalSpot[]> {
-    const qb = this.repository.createQueryBuilder('s');
-    
-    // Calculate distance using Haversine formula
-    qb.select('s.*')
-      .addSelect(`(
-        6371 * acos(
-          cos(radians(${coordinates.latitude})) * 
-          cos(radians(s.latitude)) * 
-          cos(radians(s.longitude) - radians(${coordinates.longitude})) + 
-          sin(radians(${coordinates.latitude})) * 
-          sin(radians(s.latitude))
-        )
-      ) AS distance`)
-      .where(`(
-        6371 * acos(
-          cos(radians(${coordinates.latitude})) * 
-          cos(radians(s.latitude)) * 
-          cos(radians(s.longitude) - radians(${coordinates.longitude})) + 
-          sin(radians(${coordinates.latitude})) * 
-          sin(radians(s.latitude))
-        )
-      ) <= ?`, [radiusKm])
-      .andWhere({ isActive: true });
+    const conditions: any = {
+      isActive: true
+    };
 
     if (options.excludeExpired !== false) {
-      qb.andWhere('s.expiresAt > ?', [new Date()]);
+      conditions.expiresAt = { $gt: new Date() };
     }
 
     if (options.visibility) {
-      qb.andWhere({ visibility: options.visibility });
+      conditions.visibility = options.visibility;
     }
 
     if (options.types && options.types.length > 0) {
-      qb.andWhere({ type: { $in: options.types } });
+      conditions.type = { $in: options.types };
     }
 
     if (options.tags && options.tags.length > 0) {
-      qb.andWhere({ tags: { $overlap: options.tags } });
+      conditions.tags = { $overlap: options.tags };
     }
 
-    qb.orderBy({ distance: 'ASC' })
-      .limit(options.limit || 50)
-      .offset(options.offset || 0);
+    const allSpots = await this.repository.find(conditions, {
+      populate: ['creator'],
+      limit: 1000 // Get more to filter by distance
+    });
 
-    return await qb.getResultList();
+    // Filter by distance in memory
+    const nearbySpots = allSpots.filter(spot => {
+      const distance = this.calculateDistance(
+        coordinates,
+        Coordinates.create(spot.latitude, spot.longitude)
+      );
+      return distance <= radiusKm;
+    });
+
+    // Sort by distance and apply pagination
+    nearbySpots.sort((a, b) => {
+      const distA = this.calculateDistance(
+        coordinates,
+        Coordinates.create(a.latitude, a.longitude)
+      );
+      const distB = this.calculateDistance(
+        coordinates,
+        Coordinates.create(b.latitude, b.longitude)
+      );
+      return distA - distB;
+    });
+
+    const offset = options.offset || 0;
+    const limit = options.limit || 50;
+    return nearbySpots.slice(offset, offset + limit);
+  }
+
+  private calculateDistance(coord1: Coordinates, coord2: Coordinates): number {
+    const R = 6371; // Earth radius in km
+    const lat1Rad = coord1.latitude * Math.PI / 180;
+    const lat2Rad = coord2.latitude * Math.PI / 180;
+    const deltaLat = (coord2.latitude - coord1.latitude) * Math.PI / 180;
+    const deltaLon = (coord2.longitude - coord1.longitude) * Math.PI / 180;
+
+    const a = Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
+              Math.cos(lat1Rad) * Math.cos(lat2Rad) *
+              Math.sin(deltaLon / 2) * Math.sin(deltaLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return R * c;
   }
 
   async findWithinRadius(
@@ -219,22 +243,18 @@ export class SignalSpotRepository implements ISignalSpotRepository {
       conditions.visibility = visibility;
     }
 
-    const qb = this.repository.createQueryBuilder('s');
-    
-    qb.select('s.*')
-      .where(conditions)
-      .andWhere(`(
-        6371 * acos(
-          cos(radians(${coordinates.latitude})) * 
-          cos(radians(s.latitude)) * 
-          cos(radians(s.longitude) - radians(${coordinates.longitude})) + 
-          sin(radians(${coordinates.latitude})) * 
-          sin(radians(s.latitude))
-        )
-      ) <= ?`, [radiusKm])
-      .populate(['creator']);
+    const allSpots = await this.repository.find(conditions, {
+      populate: ['creator']
+    });
 
-    return await qb.getResultList();
+    // Filter by distance
+    return allSpots.filter(spot => {
+      const distance = this.calculateDistance(
+        coordinates,
+        Coordinates.create(spot.latitude, spot.longitude)
+      );
+      return distance <= radiusKm;
+    });
   }
 
   async findByCreator(
@@ -297,7 +317,7 @@ export class SignalSpotRepository implements ISignalSpotRepository {
       conditions.tags = { $overlap: options.tags };
     }
 
-    let query = this.repository.find(conditions, {
+    const query = this.repository.find(conditions, {
       populate: ['creator'],
       orderBy: { createdAt: 'DESC' },
       limit: options.limit || 50,
@@ -354,7 +374,7 @@ export class SignalSpotRepository implements ISignalSpotRepository {
     return await this.repository.find({
       isActive: true,
       status: SpotStatus.ACTIVE,
-      expiresAt: { $between: [new Date(), thresholdDate] }
+      expiresAt: { $gte: new Date(), $lte: thresholdDate }
     }, {
       populate: ['creator'],
       orderBy: { expiresAt: 'ASC' }
@@ -369,7 +389,7 @@ export class SignalSpotRepository implements ISignalSpotRepository {
       timeframe?: 'hour' | 'day' | 'week' | 'month';
     } = {}
   ): Promise<SignalSpot[]> {
-    let since = new Date();
+    const since = new Date();
     
     switch (options.timeframe) {
       case 'hour':
@@ -418,36 +438,47 @@ export class SignalSpotRepository implements ISignalSpotRepository {
     radiusKm?: number,
     limit = 10
   ): Promise<SignalSpot[]> {
-    const qb = this.repository.createQueryBuilder('s');
-    
-    // Calculate trending score based on engagement velocity
-    qb.select('s.*')
-      .addSelect(`(
-        (s.like_count * 2 + s.reply_count * 3 + s.share_count * 4) / 
-        EXTRACT(EPOCH FROM (NOW() - s.created_at)) * 3600
-      ) AS trending_score`)
-      .where({
-        isActive: true,
-        status: SpotStatus.ACTIVE,
-        expiresAt: { $gt: new Date() },
-        createdAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } // Last 24 hours
-      })
-      .orderBy({ trending_score: 'DESC' })
-      .limit(limit);
+    const conditions = {
+      isActive: true,
+      status: SpotStatus.ACTIVE,
+      expiresAt: { $gt: new Date() },
+      createdAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } // Last 24 hours
+    };
 
+    const allSpots = await this.repository.find(conditions, {
+      populate: ['creator']
+    });
+
+    let spots = allSpots;
+    
+    // Filter by location if provided
     if (coordinates && radiusKm) {
-      qb.andWhere(`(
-        6371 * acos(
-          cos(radians(${coordinates.latitude})) * 
-          cos(radians(s.latitude)) * 
-          cos(radians(s.longitude) - radians(${coordinates.longitude})) + 
-          sin(radians(${coordinates.latitude})) * 
-          sin(radians(s.latitude))
-        )
-      ) <= ?`, [radiusKm]);
+      spots = spots.filter(spot => {
+        const distance = this.calculateDistance(
+          coordinates,
+          Coordinates.create(spot.latitude, spot.longitude)
+        );
+        return distance <= radiusKm;
+      });
     }
 
-    return await qb.getResultList();
+    // Calculate trending scores and sort
+    const now = Date.now();
+    spots.sort((a, b) => {
+      const scoreA = this.calculateTrendingScore(a, now);
+      const scoreB = this.calculateTrendingScore(b, now);
+      return scoreB - scoreA;
+    });
+
+    return spots.slice(0, limit);
+  }
+
+  private calculateTrendingScore(spot: SignalSpot, now: number): number {
+    const ageInHours = (now - spot.createdAt.getTime()) / (1000 * 60 * 60);
+    if (ageInHours === 0) return 0;
+    
+    const engagementScore = (spot.likeCount * 2) + (spot.replyCount * 3) + (spot.shareCount * 4);
+    return engagementScore / ageInHours;
   }
 
   async searchByContent(
@@ -562,27 +593,24 @@ export class SignalSpotRepository implements ISignalSpotRepository {
   }
 
   async countInRadius(coordinates: Coordinates, radiusKm: number): Promise<number> {
-    const qb = this.repository.createQueryBuilder('s');
-    
-    const result = await qb
-      .select('COUNT(*) as count')
-      .where({
-        isActive: true,
-        status: SpotStatus.ACTIVE,
-        expiresAt: { $gt: new Date() }
-      })
-      .andWhere(`(
-        6371 * acos(
-          cos(radians(${coordinates.latitude})) * 
-          cos(radians(s.latitude)) * 
-          cos(radians(s.longitude) - radians(${coordinates.longitude})) + 
-          sin(radians(${coordinates.latitude})) * 
-          sin(radians(s.latitude))
-        )
-      ) <= ?`, [radiusKm])
-      .execute();
+    const conditions = {
+      isActive: true,
+      status: SpotStatus.ACTIVE,
+      expiresAt: { $gt: new Date() }
+    };
 
-    return parseInt(result[0].count);
+    const allSpots = await this.repository.find(conditions);
+    
+    // Count spots within radius
+    const nearbySpots = allSpots.filter(spot => {
+      const distance = this.calculateDistance(
+        coordinates,
+        Coordinates.create(spot.latitude, spot.longitude)
+      );
+      return distance <= radiusKm;
+    });
+
+    return nearbySpots.length;
   }
 
   async markExpired(spotIds: SpotId[]): Promise<void> {
@@ -607,26 +635,10 @@ export class SignalSpotRepository implements ISignalSpotRepository {
     });
 
     if (expiredSpots.length > 0) {
-      await this.repository.removeAndFlush(expiredSpots);
+      await this.em.removeAndFlush(expiredSpots);
     }
 
     return expiredSpots.length;
   }
 
-  // Helper method to build location-based queries
-  private buildLocationQuery(
-    qb: QueryBuilder<SignalSpot>,
-    coordinates: Coordinates,
-    radiusKm: number
-  ): void {
-    qb.andWhere(`(
-      6371 * acos(
-        cos(radians(${coordinates.latitude})) * 
-        cos(radians(s.latitude)) * 
-        cos(radians(s.longitude) - radians(${coordinates.longitude})) + 
-        sin(radians(${coordinates.latitude})) * 
-        sin(radians(s.latitude))
-      )
-    ) <= ?`, [radiusKm]);
-  }
 }

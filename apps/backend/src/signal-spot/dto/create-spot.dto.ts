@@ -5,17 +5,14 @@ import {
   IsNumber, 
   IsEnum, 
   IsArray, 
-  ArrayMaxSize, 
-  ArrayMinSize,
+  ArrayMaxSize,
   IsObject,
   Min, 
   Max, 
   Length,
-  ValidateNested,
   IsLatitude,
   IsLongitude
 } from 'class-validator';
-import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { SpotVisibility, SpotType } from '../../entities/signal-spot.entity';
 
@@ -125,7 +122,8 @@ export class CreateSpotDto {
   @ApiPropertyOptional({
     description: 'Additional metadata for the signal spot',
     example: { category: 'food', rating: 5 },
-    type: 'object'
+    type: 'object',
+    additionalProperties: true
   })
   @IsOptional()
   @IsObject()
