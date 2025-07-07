@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from '../providers/AuthProvider';
 import { QueryProvider } from '../providers/QueryProvider';
 import { LocationProvider } from '../providers/LocationProvider';
 import { RootNavigator } from '../navigation/RootNavigator';
+import '../styles/global.css';
 
 const AppContent: React.FC = () => {
   const { isAuthenticated, isLoading } = useAuth();

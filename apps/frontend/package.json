@@ -12,6 +12,7 @@
     "@tanstack/react-query": "^5.81.5",
     "@tanstack/react-query-devtools": "^5.81.5",
     "metro-config": "0.80.12",
+    "nativewind": "^4.1.23",
     "react": "18.3.1",
     "react-native": "0.76.9",
     "react-native-geolocation-service": "^5.3.1",
@@ -22,15 +23,16 @@
     "react-native-screens": "^3.29.0",
     "react-native-svg": "^14.1.0",
     "react-native-vector-icons": "^10.2.0",
-    "styled-components": "^6.1.19"
+    "styled-components": "^6.1.19",
+    "tailwindcss": "^4.1.11"
   },
   "devDependencies": {
-    "@react-native-community/cli": "^13.6.6",
-    "@react-native-community/cli-platform-android": "^13.6.6",
-    "@react-native-community/cli-platform-ios": "^13.6.6",
     "@babel/core": "^7.20.0",
     "@babel/preset-env": "^7.20.0",
     "@babel/runtime": "^7.20.0",
+    "@react-native-community/cli": "^13.6.6",
+    "@react-native-community/cli-platform-android": "^13.6.6",
+    "@react-native-community/cli-platform-ios": "^13.6.6",
     "@testing-library/jest-native": "^5.4.3",
     "@testing-library/react-native": "^12.4.2",
     "@types/react": "^18.2.6",
