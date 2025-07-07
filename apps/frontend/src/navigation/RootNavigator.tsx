@@ -4,10 +4,10 @@ import { RootStackParamList } from './types';
 import { AuthStackNavigator } from './AuthStack';
 import { MainTabNavigator } from './MainTabNavigator';
 
-// Import additional screens (will be created later)
+// Import additional screens
 import SpotDetailScreen from '../screens/SpotDetailScreen';
 import ChatRoomScreen from '../screens/ChatRoomScreen';
-import ProfileScreen from '../screens/ProfileScreen';
+import ProfileScreen from '../screens/main/ProfileScreen';
 import CreateSpotScreen from '../screens/CreateSpotScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 

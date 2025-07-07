@@ -1,4 +1,6 @@
 import { apiService, ApiResponse } from './api.service';
+import Geolocation, { GeoError, GeoPosition, GeoOptions } from 'react-native-geolocation-service';
+import { PermissionsAndroid, Platform } from 'react-native';
 
 // Location permission status
 export enum LocationPermissionStatus {
@@ -6,6 +8,7 @@ export enum LocationPermissionStatus {
   DENIED = 'denied',
   RESTRICTED = 'restricted',
   UNDETERMINED = 'undetermined',
+  UNAVAILABLE = 'unavailable',
 }
 
 // Location interfaces
@@ -94,6 +97,33 @@ export interface LocationHistory {
   createdAt: string;
 }
 
+export interface LocationCoordinates {
+  latitude: number;
+  longitude: number;
+  accuracy?: number;
+  altitude?: number;
+  altitudeAccuracy?: number;
+  heading?: number;
+  speed?: number;
+  timestamp?: number;
+}
+
+export interface LocationError {
+  code: number;
+  message: string;
+  type?: string;
+}
+
+export interface LocationTrackingOptions {
+  enableHighAccuracy?: boolean;
+  distanceFilter?: number;
+  interval?: number;
+  fastestInterval?: number;
+  showsBackgroundLocationIndicator?: boolean;
+  notificationTitle?: string;
+  notificationBody?: string;
+}
+
 export interface LocationPermissions {
   granted: boolean;
   denied: boolean;
@@ -177,6 +207,11 @@ export interface SafeZone {
 
 class LocationService {
   private readonly baseEndpoint = '/location';
+  private watchId: number | null = null;
+  private lastKnownLocation: LocationCoordinates | null = null;
+  private locationUpdateListeners: ((location: LocationCoordinates) => void)[] = [];
+  private locationErrorListeners: ((error: LocationError) => void)[] = [];
+  private permissionStatusListeners: ((status: LocationPermissionStatus) => void)[] = [];
 
   // Get current location sharing settings
   async getLocationSettings(): Promise<ApiResponse<LocationSharingSettings>> {
@@ -567,6 +602,211 @@ class LocationService {
     // This would be implemented based on device capabilities and battery optimization
 
     return optimized;
+  }
+
+  // Device Location Methods
+  async checkLocationPermission(): Promise<LocationPermissionStatus> {
+    if (Platform.OS === 'ios') {
+      const status = await Geolocation.requestAuthorization('whenInUse');
+      switch (status) {
+        case 'granted':
+          return LocationPermissionStatus.GRANTED;
+        case 'denied':
+          return LocationPermissionStatus.DENIED;
+        case 'restricted':
+          return LocationPermissionStatus.RESTRICTED;
+        default:
+          return LocationPermissionStatus.UNDETERMINED;
+      }
+    } else {
+      const granted = await PermissionsAndroid.check(
+        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
+      );
+      return granted ? LocationPermissionStatus.GRANTED : LocationPermissionStatus.DENIED;
+    }
+  }
+
+  async requestLocationPermission(): Promise<LocationPermissionStatus> {
+    if (Platform.OS === 'ios') {
+      return this.checkLocationPermission();
+    } else {
+      const granted = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
+      );
+      switch (granted) {
+        case PermissionsAndroid.RESULTS.GRANTED:
+          return LocationPermissionStatus.GRANTED;
+        case PermissionsAndroid.RESULTS.DENIED:
+          return LocationPermissionStatus.DENIED;
+        case PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN:
+          return LocationPermissionStatus.RESTRICTED;
+        default:
+          return LocationPermissionStatus.UNDETERMINED;
+      }
+    }
+  }
+
+  async requestAllLocationPermissions(): Promise<{ foreground: LocationPermissionStatus; background: LocationPermissionStatus }> {
+    const foreground = await this.requestLocationPermission();
+    let background = LocationPermissionStatus.DENIED;
+
+    if (foreground === LocationPermissionStatus.GRANTED) {
+      if (Platform.OS === 'android') {
+        const bgGranted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.ACCESS_BACKGROUND_LOCATION
+        );
+        background = bgGranted === PermissionsAndroid.RESULTS.GRANTED 
+          ? LocationPermissionStatus.GRANTED 
+          : LocationPermissionStatus.DENIED;
+      } else {
+        // iOS handles background permission differently
+        const status = await Geolocation.requestAuthorization('always');
+        background = status === 'granted' ? LocationPermissionStatus.GRANTED : LocationPermissionStatus.DENIED;
+      }
+    }
+
+    return { foreground, background };
+  }
+
+  async getCurrentLocation(options?: GeoOptions): Promise<LocationCoordinates> {
+    return new Promise((resolve, reject) => {
+      Geolocation.getCurrentPosition(
+        (position) => {
+          const location: LocationCoordinates = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy: position.coords.accuracy,
+            altitude: position.coords.altitude || undefined,
+            altitudeAccuracy: position.coords.altitudeAccuracy || undefined,
+            heading: position.coords.heading || undefined,
+            speed: position.coords.speed || undefined,
+            timestamp: position.timestamp,
+          };
+          this.lastKnownLocation = location;
+          resolve(location);
+        },
+        (error) => {
+          reject({
+            code: error.code,
+            message: error.message,
+            type: 'LOCATION_ERROR',
+          } as LocationError);
+        },
+        options || {
+          enableHighAccuracy: true,
+          timeout: 15000,
+          maximumAge: 10000,
+        }
+      );
+    });
+  }
+
+  startLocationTracking(options: LocationTrackingOptions): boolean {
+    if (this.watchId !== null) {
+      return false; // Already tracking
+    }
+
+    const geoOptions: GeoOptions = {
+      enableHighAccuracy: options.enableHighAccuracy ?? true,
+      distanceFilter: options.distanceFilter ?? 10,
+      interval: options.interval ?? 5000,
+      fastestInterval: options.fastestInterval ?? 2000,
+      showsBackgroundLocationIndicator: options.showsBackgroundLocationIndicator ?? true,
+    };
+
+    this.watchId = Geolocation.watchPosition(
+      (position) => {
+        const location: LocationCoordinates = {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          accuracy: position.coords.accuracy,
+          altitude: position.coords.altitude || undefined,
+          altitudeAccuracy: position.coords.altitudeAccuracy || undefined,
+          heading: position.coords.heading || undefined,
+          speed: position.coords.speed || undefined,
+          timestamp: position.timestamp,
+        };
+        this.lastKnownLocation = location;
+        this.notifyLocationUpdate(location);
+      },
+      (error) => {
+        this.notifyLocationError({
+          code: error.code,
+          message: error.message,
+          type: 'TRACKING_ERROR',
+        });
+      },
+      geoOptions
+    );
+
+    return true;
+  }
+
+  stopLocationTracking(): void {
+    if (this.watchId !== null) {
+      Geolocation.clearWatch(this.watchId);
+      this.watchId = null;
+    }
+  }
+
+  getLastKnownLocation(): LocationCoordinates | null {
+    return this.lastKnownLocation;
+  }
+
+  // Event listeners
+  onLocationUpdate(listener: (location: LocationCoordinates) => void): () => void {
+    this.locationUpdateListeners.push(listener);
+    return () => {
+      this.locationUpdateListeners = this.locationUpdateListeners.filter(l => l !== listener);
+    };
+  }
+
+  onLocationError(listener: (error: LocationError) => void): () => void {
+    this.locationErrorListeners.push(listener);
+    return () => {
+      this.locationErrorListeners = this.locationErrorListeners.filter(l => l !== listener);
+    };
+  }
+
+  onPermissionStatusChange(listener: (status: LocationPermissionStatus) => void): () => void {
+    this.permissionStatusListeners.push(listener);
+    return () => {
+      this.permissionStatusListeners = this.permissionStatusListeners.filter(l => l !== listener);
+    };
+  }
+
+  private notifyLocationUpdate(location: LocationCoordinates): void {
+    this.locationUpdateListeners.forEach(listener => listener(location));
+  }
+
+  private notifyLocationError(error: LocationError): void {
+    this.locationErrorListeners.forEach(listener => listener(error));
+  }
+
+  private notifyPermissionStatusChange(status: LocationPermissionStatus): void {
+    this.permissionStatusListeners.forEach(listener => listener(status));
+  }
+
+  // Utility methods
+  calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const R = 6371; // Earth's radius in kilometers
+    const dLat = this.toRad(lat2 - lat1);
+    const dLon = this.toRad(lon2 - lon1);
+    const a = 
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(this.toRad(lat1)) * Math.cos(this.toRad(lat2)) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  }
+
+  isWithinRadius(lat1: number, lon1: number, lat2: number, lon2: number, radiusKm: number): boolean {
+    const distance = this.calculateDistance(lat1, lon1, lat2, lon2);
+    return distance <= radiusKm;
+  }
+
+  private toRad(value: number): number {
+    return value * Math.PI / 180;
   }
 }
 
