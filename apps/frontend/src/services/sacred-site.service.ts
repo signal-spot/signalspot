@@ -208,7 +208,7 @@ class SacredSiteService {
    * Get sacred sites leaderboard
    */
   async getLeaderboard(
-    limit: number = 10,
+    limit = 10,
     tier?: SiteTier,
     location?: { latitude: number; longitude: number; radiusKm: number }
   ): Promise<ApiResponse<{
@@ -274,7 +274,7 @@ class SacredSiteService {
    */
   async getSiteStatistics(
     siteId: string,
-    days: number = 30
+    days = 30
   ): Promise<ApiResponse<SiteStatistics>> {
     try {
       const response = await fetch(`${this.baseUrl}/${siteId}/statistics?days=${days}`, {

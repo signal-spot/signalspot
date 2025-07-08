@@ -224,7 +224,7 @@ class SignalSpotService {
   async getLocationStatistics(
     latitude: number,
     longitude: number,
-    radiusKm: number = 1
+    radiusKm = 1
   ): Promise<ApiResponse<LocationStatistics>> {
     return apiService.get<ApiResponse<LocationStatistics>>(
       `${this.baseEndpoint}/location-stats`,
@@ -245,8 +245,8 @@ class SignalSpotService {
   // Get similar spots
   async getSimilarSpots(
     spotId: string,
-    radiusKm: number = 2,
-    limit: number = 10
+    radiusKm = 2,
+    limit = 10
   ): Promise<PaginatedResponse<SignalSpot>> {
     return apiService.get<PaginatedResponse<SignalSpot>>(
       `${this.baseEndpoint}/${spotId}/similar`,

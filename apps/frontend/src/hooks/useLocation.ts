@@ -190,7 +190,7 @@ export const useLocation = (options: UseLocationOptions = {}): UseLocationReturn
   }, [getCurrentLocation]);
 
   // Check if location is recent
-  const isLocationRecent = useCallback((maxAgeMs: number = 30000): boolean => {
+  const isLocationRecent = useCallback((maxAgeMs = 30000): boolean => {
     if (!state.lastUpdate) return false;
     return Date.now() - state.lastUpdate <= maxAgeMs;
   }, [state.lastUpdate]);

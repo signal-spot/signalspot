@@ -163,7 +163,7 @@ export const SignatureConnectionForm: React.FC<SignatureConnectionFormProps> = (
     value: string,
     onChangeText: (text: string) => void,
     placeholder: string,
-    multiline: boolean = false,
+    multiline = false,
     maxLength?: number,
     errorKey?: string
   ) => (

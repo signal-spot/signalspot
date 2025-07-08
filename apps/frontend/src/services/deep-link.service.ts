@@ -371,7 +371,7 @@ export class DeepLinkService {
   /**
    * Create sharing URL with tracking parameters
    */
-  createSharingURL(data: DeepLinkData, source: string = 'share'): string {
+  createSharingURL(data: DeepLinkData, source = 'share'): string {
     const baseUrl = this.generateDeepLink(data);
     const url = new URL(baseUrl);
     

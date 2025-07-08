@@ -235,7 +235,7 @@ export const LocationProvider: React.FC<LocationProviderProps> = ({ children }) 
   };
 
   // Check if location is recent
-  const isLocationRecent = (maxAgeMs: number = 30000): boolean => {
+  const isLocationRecent = (maxAgeMs = 30000): boolean => {
     if (!lastUpdate) return false;
     return Date.now() - lastUpdate <= maxAgeMs;
   };

@@ -1,7 +1,12 @@
-import { Platform, Alert, Linking } from 'react-native';
+import { Alert, Linking } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import messaging, { FirebaseMessagingTypes } from '@react-native-firebase/messaging';
+// import messaging, { FirebaseMessagingTypes } from '@react-native-firebase/messaging';
 import { apiService } from './api.service';
+
+// Temporary types until Firebase is installed
+type FirebaseMessagingTypes = {
+  RemoteMessage: any;
+};
 
 export enum NotificationType {
   SPARK_DETECTED = 'spark_detected',
@@ -72,6 +77,9 @@ class NotificationService {
         return false;
       }
 
+      // Firebase messaging is currently disabled
+      // TODO: Enable when Firebase is properly installed
+      /*
       // Get FCM token
       const token = await messaging().getToken();
       this.fcmToken = token;
@@ -96,12 +104,19 @@ class NotificationService {
       messaging().onNotificationOpenedApp((remoteMessage) => {
         this.handleNotificationOpen(remoteMessage);
       });
+      */
+      
+      // For now, just mark as initialized
+      this.fcmToken = 'mock-token';
 
       // Check if app was opened from notification
+      // TODO: Enable when Firebase is properly installed
+      /*
       const initialNotification = await messaging().getInitialNotification();
       if (initialNotification) {
         this.handleNotificationOpen(initialNotification);
       }
+      */
 
       this.isInitialized = true;
       console.log('Notification service initialized');
@@ -138,7 +153,7 @@ class NotificationService {
   }
 
   private async handleForegroundMessage(
-    remoteMessage: FirebaseMessagingTypes.RemoteMessage
+    remoteMessage: any // FirebaseMessagingTypes.RemoteMessage
   ): Promise<void> {
     const notification: NotificationData = {
       id: remoteMessage.messageId || Date.now().toString(),
@@ -161,7 +176,7 @@ class NotificationService {
   }
 
   private handleNotificationOpen(
-    remoteMessage: FirebaseMessagingTypes.RemoteMessage
+    remoteMessage: any // FirebaseMessagingTypes.RemoteMessage
   ): void {
     const type = remoteMessage.data?.type as NotificationType;
     const data = remoteMessage.data;
@@ -176,52 +191,58 @@ class NotificationService {
     
     switch (type) {
       case NotificationType.SPARK_DETECTED:
-      case NotificationType.SPARK_MATCHED:
+      case NotificationType.SPARK_MATCHED: {
         const sparkId = data?.sparkId;
         if (sparkId) {
           Linking.openURL(`signalspot://sparks/${sparkId}`);
         }
         break;
+      }
         
-      case NotificationType.MESSAGE_RECEIVED:
+      case NotificationType.MESSAGE_RECEIVED: {
         const chatId = data?.chatId;
         if (chatId) {
           Linking.openURL(`signalspot://chat/${chatId}`);
         }
         break;
+      }
         
-      case NotificationType.SIGNAL_SPOT_NEARBY:
+      case NotificationType.SIGNAL_SPOT_NEARBY: {
         const spotId = data?.spotId;
         if (spotId) {
           Linking.openURL(`signalspot://spots/${spotId}`);
         }
         break;
+      }
         
       case NotificationType.SACRED_SITE_DISCOVERED:
-      case NotificationType.SACRED_SITE_TIER_UPGRADED:
+      case NotificationType.SACRED_SITE_TIER_UPGRADED: {
         const siteId = data?.siteId;
         if (siteId) {
           Linking.openURL(`signalspot://sacred-sites/${siteId}`);
         }
         break;
+      }
         
-      case NotificationType.PROFILE_VISITED:
+      case NotificationType.PROFILE_VISITED: {
         const visitorId = data?.visitorId;
         if (visitorId) {
           Linking.openURL(`signalspot://profile/${visitorId}`);
         }
         break;
+      }
         
       case NotificationType.FRIEND_REQUEST:
         Linking.openURL('signalspot://friends/requests');
         break;
         
-      case NotificationType.ACHIEVEMENT_UNLOCKED:
+      case NotificationType.ACHIEVEMENT_UNLOCKED: {
         const achievementId = data?.achievementId;
         if (achievementId) {
           Linking.openURL(`signalspot://achievements/${achievementId}`);
         }
         break;
+      }
         
       case NotificationType.LOCATION_SHARING_REQUEST:
         Linking.openURL('signalspot://location/sharing/requests');
@@ -489,7 +510,7 @@ class NotificationService {
     }
   }
 
-  async getServerNotifications(limit: number = 20, offset: number = 0): Promise<NotificationData[]> {
+  async getServerNotifications(limit = 20, offset = 0): Promise<NotificationData[]> {
     try {
       const response = await apiService.get(`/notifications?limit=${limit}&offset=${offset}`);
       return response.data.notifications || [];

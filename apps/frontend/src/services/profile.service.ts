@@ -308,6 +308,15 @@ class ProfileService {
     );
   }
 
+  // Get my profile analytics
+  async getMyProfileAnalytics(): Promise<ApiResponse<ProfileAnalytics>> {
+    return apiService.get<ApiResponse<ProfileAnalytics>>(
+      `${this.baseEndpoint}/me/analytics`,
+      {},
+      'profileAnalytics'
+    );
+  }
+
   // Get connection suggestions
   async getConnectionSuggestions(limit = 10): Promise<ApiResponse<ProfileSearchResult[]>> {
     return apiService.get<ApiResponse<ProfileSearchResult[]>>(
@@ -448,15 +457,6 @@ class ProfileService {
     );
   }
 
-  // Get profile analytics
-  async getProfileAnalytics(): Promise<ApiResponse<ProfileAnalytics>> {
-    return apiService.get<ApiResponse<ProfileAnalytics>>(
-      `${this.baseEndpoint}/me/analytics`,
-      {},
-      'profileAnalytics'
-    );
-  }
-
   // Request profile verification
   async requestVerification(
     verificationData: VerificationRequest
@@ -486,15 +486,6 @@ class ProfileService {
     );
   }
 
-  // Search profiles
-  async searchProfiles(searchQuery: ProfileSearchQuery): Promise<ApiResponse<ProfileSearchResult[]>> {
-    return apiService.get<ApiResponse<ProfileSearchResult[]>>(
-      `${this.baseEndpoint}/search`,
-      searchQuery,
-      'searchProfiles'
-    );
-  }
-
   // Follow user
   async followUser(userId: string): Promise<ApiResponse<{ message: string }>> {
     return apiService.post<ApiResponse<{ message: string }>>(
@@ -513,7 +504,7 @@ class ProfileService {
   }
 
   // Get followers
-  async getFollowers(userId?: string, limit: number = 50, offset: number = 0): Promise<ApiResponse<ProfileSearchResult[]>> {
+  async getFollowers(userId?: string, limit = 50, offset = 0): Promise<ApiResponse<ProfileSearchResult[]>> {
     const endpoint = userId ? `${this.baseEndpoint}/${userId}/followers` : `${this.baseEndpoint}/me/followers`;
     return apiService.get<ApiResponse<ProfileSearchResult[]>>(
       endpoint,
@@ -523,7 +514,7 @@ class ProfileService {
   }
 
   // Get following
-  async getFollowing(userId?: string, limit: number = 50, offset: number = 0): Promise<ApiResponse<ProfileSearchResult[]>> {
+  async getFollowing(userId?: string, limit = 50, offset = 0): Promise<ApiResponse<ProfileSearchResult[]>> {
     const endpoint = userId ? `${this.baseEndpoint}/${userId}/following` : `${this.baseEndpoint}/me/following`;
     return apiService.get<ApiResponse<ProfileSearchResult[]>>(
       endpoint,
@@ -589,8 +580,8 @@ class ProfileService {
   async getNearbyUsers(
     latitude: number,
     longitude: number,
-    radiusKm: number = 1,
-    limit: number = 20
+    radiusKm = 1,
+    limit = 20
   ): Promise<ApiResponse<ProfileSearchResult[]>> {
     return apiService.get<ApiResponse<ProfileSearchResult[]>>(
       `${this.baseEndpoint}/nearby`,

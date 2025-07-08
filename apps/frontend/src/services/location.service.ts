@@ -253,8 +253,8 @@ class LocationService {
   async getNearbyUsers(
     latitude: number,
     longitude: number,
-    radiusKm: number = 1,
-    limit: number = 50
+    radiusKm = 1,
+    limit = 50
   ): Promise<ApiResponse<NearbyUser[]>> {
     return apiService.get<ApiResponse<NearbyUser[]>>(
       `${this.baseEndpoint}/nearby-users`,
@@ -267,8 +267,8 @@ class LocationService {
   async getLocationHistory(
     startDate?: string,
     endDate?: string,
-    limit: number = 100,
-    offset: number = 0
+    limit = 100,
+    offset = 0
   ): Promise<ApiResponse<LocationHistory[]>> {
     const params: any = { limit, offset };
     if (startDate) params.startDate = startDate;
@@ -341,9 +341,9 @@ class LocationService {
   async getLocationSuggestions(
     latitude: number,
     longitude: number,
-    radiusKm: number = 1,
+    radiusKm = 1,
     type?: string,
-    limit: number = 20
+    limit = 20
   ): Promise<ApiResponse<LocationSuggestion[]>> {
     return apiService.get<ApiResponse<LocationSuggestion[]>>(
       `${this.baseEndpoint}/suggestions`,
@@ -487,13 +487,13 @@ class LocationService {
     return `${distanceKm.toFixed(1)}km`;
   }
 
-  isLocationRecent(timestamp: number, maxAgeMinutes: number = 30): boolean {
+  isLocationRecent(timestamp: number, maxAgeMinutes = 30): boolean {
     const now = Date.now();
     const ageMinutes = (now - timestamp) / (1000 * 60);
     return ageMinutes <= maxAgeMinutes;
   }
 
-  isLocationAccurate(accuracy: number, threshold: number = 100): boolean {
+  isLocationAccurate(accuracy: number, threshold = 100): boolean {
     return accuracy <= threshold;
   }
 
@@ -517,7 +517,7 @@ class LocationService {
     const x = Math.cos(lat1Rad) * Math.sin(lat2Rad) - 
               Math.sin(lat1Rad) * Math.cos(lat2Rad) * Math.cos(dLon);
     
-    let bearing = Math.atan2(y, x) * 180 / Math.PI;
+    const bearing = Math.atan2(y, x) * 180 / Math.PI;
     return (bearing + 360) % 360;
   }
 

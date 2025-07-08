@@ -141,13 +141,14 @@ export const CreateSpotModal: React.FC<CreateSpotModalProps> = ({
         return true;
       case 2:
         return true; // Type and visibility selection
-      case 3:
+      case 3: {
         const radius = parseInt(customRadius);
         if (isNaN(radius) || radius < 10 || radius > 1000) {
           Alert.alert('입력 오류', '반경은 10m ~ 1000m 사이로 설정해주세요.');
           return false;
         }
         return true;
+      }
       default:
         return true;
     }

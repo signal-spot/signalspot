@@ -239,7 +239,7 @@ class FeedService {
   /**
    * Get trending tags
    */
-  async getTrendingTags(limit: number = 10): Promise<ApiResponse<TrendingTag[]>> {
+  async getTrendingTags(limit = 10): Promise<ApiResponse<TrendingTag[]>> {
     try {
       const response = await fetch(`${this.baseUrl}/trending-tags?limit=${limit}`, {
         method: 'GET',
@@ -270,7 +270,7 @@ class FeedService {
   /**
    * Get recommended users
    */
-  async getRecommendedUsers(limit: number = 10): Promise<ApiResponse<RecommendedUser[]>> {
+  async getRecommendedUsers(limit = 10): Promise<ApiResponse<RecommendedUser[]>> {
     try {
       const response = await fetch(`${this.baseUrl}/recommended-users?limit=${limit}`, {
         method: 'GET',

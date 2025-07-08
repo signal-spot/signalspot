@@ -40,7 +40,7 @@ export class AnalyticsService {
   private static instance: AnalyticsService;
   private config: AnalyticsConfig;
   private eventQueue: Array<ShareAnalyticsEvent | UserEngagementEvent | ConversionEvent> = [];
-  private isOnline: boolean = true;
+  private isOnline = true;
   private flushInterval?: NodeJS.Timeout;
 
   constructor(config: AnalyticsConfig = {}) {

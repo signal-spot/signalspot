@@ -44,7 +44,9 @@ export type MainTabScreenProps<T extends keyof MainTabParamList> =
 export type NavigationProps = RootStackScreenProps<keyof RootStackParamList>['navigation'];
 
 declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace ReactNavigation {
+    // eslint-disable-next-line @typescript-eslint/no-empty-object-type, @typescript-eslint/no-empty-interface
     interface RootParamList extends RootStackParamList {}
   }
 } 

@@ -7,7 +7,7 @@ import {
   Dimensions,
   ImageBackground,
 } from 'react-native';
-import { DesignSystem } from '../../design-system';
+import { DesignSystem } from '../../utils/designSystem';
 
 interface ShareableCardProps {
   type: 'spot' | 'spark' | 'profile';

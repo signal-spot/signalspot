@@ -1,5 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+// React import for hook
+import React from 'react';
+
 // Base API configuration
 const API_BASE_URL = __DEV__ 
   ? 'http://localhost:3001/api' 
@@ -388,6 +391,3 @@ export const useLoadingState = (key: string) => {
 
   return loading;
 };
-
-// React import for hook
-import React from 'react';

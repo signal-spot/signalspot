@@ -134,7 +134,7 @@ class PermissionService {
    */
   async requestPermission(
     type: PermissionType,
-    showRationale: boolean = true
+    showRationale = true
   ): Promise<PermissionResult> {
     try {
       const permission = this.permissionMap[type];
@@ -195,7 +195,7 @@ class PermissionService {
    */
   async requestMultiplePermissions(
     types: PermissionType[],
-    showRationale: boolean = true
+    showRationale = true
   ): Promise<Record<PermissionType, PermissionResult>> {
     const results: Record<PermissionType, PermissionResult> = {} as any;
 
@@ -419,7 +419,7 @@ class PermissionService {
   /**
    * Check if location permission is sufficient for features
    */
-  async checkLocationPermissionForFeature(requiresAlways: boolean = false): Promise<boolean> {
+  async checkLocationPermissionForFeature(requiresAlways = false): Promise<boolean> {
     const baseStatus = await this.checkPermission(PermissionType.LOCATION);
     
     if (baseStatus !== PermissionStatus.GRANTED) {
@@ -437,7 +437,7 @@ class PermissionService {
   /**
    * Request location permission with appropriate level
    */
-  async requestLocationPermissionForFeature(requiresAlways: boolean = false): Promise<boolean> {
+  async requestLocationPermissionForFeature(requiresAlways = false): Promise<boolean> {
     // First request basic location permission
     const baseResult = await this.requestPermission(PermissionType.LOCATION);
     

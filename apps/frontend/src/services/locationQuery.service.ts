@@ -214,8 +214,8 @@ class LocationQueryService {
    * Get current user's location history
    */
   async getLocationHistory(
-    limit: number = 50,
-    offset: number = 0
+    limit = 50,
+    offset = 0
   ): Promise<ApiResponse<LocationRecord[]>> {
     const params = new URLSearchParams({
       limit: limit.toString(),
@@ -328,7 +328,7 @@ class LocationQueryService {
    * Find locations within current user's radius
    */
   async findLocationsAroundMe(
-    radius: number = 5,
+    radius = 5,
     options?: {
       privacy?: string;
       accuracyLevel?: string;
@@ -360,7 +360,7 @@ class LocationQueryService {
    * Find users around current location
    */
   async findUsersAroundMe(
-    radius: number = 2,
+    radius = 2,
     options?: {
       locationPrivacy?: string;
       limit?: number;

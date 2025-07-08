@@ -8,7 +8,7 @@ import {
 } from 'react-native';
 import ShareModal from './ShareModal';
 import { ShareContent } from '../../services/share.service';
-import { DesignSystem } from '../../design-system';
+import { DesignSystem } from '../../utils/designSystem';
 
 interface ShareButtonProps {
   content: ShareContent;

@@ -13,7 +13,7 @@ import {
 import ViewShot from 'react-native-view-shot';
 import ShareService, { ShareContent, ShareResult } from '../../services/share.service';
 import ShareableCard from './ShareableCard';
-import { DesignSystem } from '../../design-system';
+import { DesignSystem } from '../../utils/designSystem';
 
 interface ShareModalProps {
   visible: boolean;
