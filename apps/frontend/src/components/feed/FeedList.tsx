@@ -82,7 +82,7 @@ export const FeedList: React.FC<FeedListProps> = ({
     setLoading(true);
     setOffset(0);
     loadFeed(true);
-  }, [query, showTrending]);
+  }, [query, showTrending, loadFeed]);
 
   // Handle refresh
   const handleRefresh = useCallback(() => {

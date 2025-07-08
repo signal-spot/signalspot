@@ -189,8 +189,8 @@ export const SpotDetailScreen: React.FC = () => {
         id: spotData.id,
         type: spotData.type,
         location: {
-          latitude: spotData.coordinates.latitude,
-          longitude: spotData.coordinates.longitude,
+          latitude: spotData.latitude,
+          longitude: spotData.longitude,
         },
       },
     };
@@ -561,3 +561,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
 });
+
+export default SpotDetailScreen;

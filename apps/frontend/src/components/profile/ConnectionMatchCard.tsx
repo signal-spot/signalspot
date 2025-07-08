@@ -126,7 +126,7 @@ const ConnectionTypes = styled.View`
 
 const ConnectionType = styled.View`
   background-color: #fff0f0;
-  border: 1px solid: #ffe0e0;
+  border: 1px solid #ffe0e0;
   padding: 6px 12px;
   border-radius: 16px;
 `;

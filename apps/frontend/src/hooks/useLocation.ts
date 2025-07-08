@@ -1,12 +1,10 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import { 
   locationService, 
   LocationCoordinates, 
-  LocationUpdate, 
   LocationError, 
-  LocationPermissionStatus,
-  LocationOptions 
+  LocationPermissionStatus 
 } from '../services/location.service';
 
 export interface LocationState {
@@ -75,12 +73,12 @@ export const useLocation = (options: UseLocationOptions = {}): UseLocationReturn
   const trackingEnabled = useRef(false);
 
   // Location service options
-  const locationOptions: LocationOptions = {
+  const locationOptions = useMemo(() => ({
     enableHighAccuracy,
     timeout,
     maximumAge,
     distanceFilter,
-  };
+  }), [enableHighAccuracy, timeout, maximumAge, distanceFilter]);
 
   // Update state helper
   const updateState = useCallback((updates: Partial<LocationState>) => {
@@ -88,12 +86,12 @@ export const useLocation = (options: UseLocationOptions = {}): UseLocationReturn
   }, []);
 
   // Handle location updates
-  const handleLocationUpdate = useCallback((locationUpdate: LocationUpdate) => {
+  const handleLocationUpdate = useCallback((coordinates: LocationCoordinates) => {
     updateState({
-      coordinates: locationUpdate.coordinates,
+      coordinates,
       loading: false,
       error: null,
-      lastUpdate: locationUpdate.timestamp,
+      lastUpdate: Date.now(),
     });
   }, [updateState]);
 
@@ -241,7 +239,20 @@ export const useLocation = (options: UseLocationOptions = {}): UseLocationReturn
     return () => subscription?.remove();
   }, [startTracking, stopTracking, trackInBackground]);
 
-  // Initialize location service and set up subscriptions
+  // Set up location service subscriptions
+  useEffect(() => {
+    const unsubscribeLocationUpdate = locationService.onLocationUpdate(handleLocationUpdate);
+    const unsubscribeLocationError = locationService.onLocationError(handleLocationError);
+    const unsubscribePermissionStatus = locationService.onPermissionStatusChange(handlePermissionStatusChange);
+
+    return () => {
+      unsubscribeLocationUpdate();
+      unsubscribeLocationError();
+      unsubscribePermissionStatus();
+    };
+  }, [handleLocationUpdate, handleLocationError, handlePermissionStatusChange]);
+
+  // Initialize location service
   useEffect(() => {
     let mounted = true;
 
@@ -254,41 +265,25 @@ export const useLocation = (options: UseLocationOptions = {}): UseLocationReturn
 
       // Request permission if needed
       if (requestPermissionOnMount && initialStatus !== LocationPermissionStatus.GRANTED) {
-        await requestPermission();
-      }
-
-      // Auto-start tracking if enabled and permission granted
-      if (autoStart && initialStatus === LocationPermissionStatus.GRANTED) {
+        const status = await requestPermission();
+        if (!mounted) return;
+        
+        // Auto-start tracking if enabled and permission granted
+        if (autoStart && status === LocationPermissionStatus.GRANTED) {
+          startTracking();
+        }
+      } else if (autoStart && initialStatus === LocationPermissionStatus.GRANTED) {
         startTracking();
       }
     };
 
     initialize();
 
-    // Set up location service subscriptions
-    const unsubscribeLocationUpdate = locationService.onLocationUpdate(handleLocationUpdate);
-    const unsubscribeLocationError = locationService.onLocationError(handleLocationError);
-    const unsubscribePermissionStatus = locationService.onPermissionStatusChange(handlePermissionStatusChange);
-
-    // Cleanup function
     return () => {
       mounted = false;
-      unsubscribeLocationUpdate();
-      unsubscribeLocationError();
-      unsubscribePermissionStatus();
       stopTracking();
     };
-  }, [
-    autoStart,
-    requestPermissionOnMount,
-    requestPermission,
-    startTracking,
-    stopTracking,
-    handleLocationUpdate,
-    handleLocationError,
-    handlePermissionStatusChange,
-    updateState,
-  ]);
+  }, [autoStart, requestPermissionOnMount, requestPermission, startTracking, stopTracking, updateState]);
 
   return {
     // State

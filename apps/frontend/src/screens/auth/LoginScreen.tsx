@@ -11,11 +11,12 @@ import {
   ScrollView,
   ActivityIndicator,
 } from 'react-native';
+import type { NavigationProp } from '@react-navigation/native';
 import { useAuth } from '../../providers/AuthProvider';
 import { authService } from '../../services/auth.service';
 
 interface LoginScreenProps {
-  navigation: any;
+  navigation: NavigationProp<any>;
 }
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
