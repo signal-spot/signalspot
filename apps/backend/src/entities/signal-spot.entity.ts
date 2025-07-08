@@ -326,6 +326,11 @@ export class SpotReachedViewThresholdEvent extends DomainEvent {
 
 // SignalSpot Entity
 @Entity()
+@Index({ properties: ['latitude', 'longitude'] }) // Spatial index for location queries
+@Index({ properties: ['status', 'visibility', 'expiresAt'] }) // Common query patterns
+@Index({ properties: ['type', 'status', 'createdAt'] }) // Type-based queries
+@Index({ properties: ['creator', 'status', 'createdAt'] }) // Creator's spots
+@Index({ properties: ['likeCount', 'viewCount', 'createdAt'] }) // Popularity queries
 export class SignalSpot extends AggregateRoot {
   @PrimaryKey({ type: 'uuid' })
   @Index()

@@ -3,6 +3,8 @@ import { PostgreSqlDriver } from '@mikro-orm/postgresql';
 import { User } from '../entities/user.entity';
 import { Location } from '../entities/location.entity';
 import { SignalSpot } from '../entities/signal-spot.entity';
+import { Spark } from '../spark/entities/spark.entity';
+import { LocationHistory } from '../spark/entities/location-history.entity';
 
 export const databaseConfig: Options = {
   driver: PostgreSqlDriver,
@@ -11,7 +13,7 @@ export const databaseConfig: Options = {
   user: process.env.DB_USERNAME || 'postgres',
   password: process.env.DB_PASSWORD || 'postgres',
   dbName: process.env.DB_DATABASE || 'signalspot',
-  entities: [User, Location, SignalSpot],
+  entities: [User, Location, SignalSpot, Spark, LocationHistory],
   debug: process.env.NODE_ENV !== 'production',
   migrations: {
     path: './migrations',

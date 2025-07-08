@@ -155,7 +155,7 @@ export class UploadService {
           const filename = `${baseFilename}${variation}${ext}`;
           const filePath = path.join(this.uploadDir, filename);
           await fs.unlink(filePath);
-        } catch (error) {
+        } catch {
           // Ignore errors for non-existent files
         }
       }

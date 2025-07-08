@@ -5,8 +5,6 @@ import {
   SignatureConnectionPreferencesDto,
   ConnectionMatchDto,
   ConnectionType,
-  AvailabilityLevel,
-  MeetingPreference,
   SignatureConnectionStatsDto,
 } from '../dto/signature-connection.dto';
 
@@ -92,7 +90,7 @@ export class SignatureConnectionService {
     }
 
     // Find potential matches
-    const [potentialMatches, total] = await this.em.findAndCount(
+    const [potentialMatches] = await this.em.findAndCount(
       User,
       searchCriteria,
       {

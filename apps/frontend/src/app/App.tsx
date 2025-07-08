@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from '../providers/AuthProvider';
 import { ProfileProvider } from '../providers/ProfileProvider';
 import { QueryProvider } from '../providers/QueryProvider';
 import { LocationProvider } from '../providers/LocationProvider';
+import { FeedProvider } from '../providers/FeedProvider';
 import { RootNavigator } from '../navigation/RootNavigator';
 
 const AppContent: React.FC = () => {
@@ -30,7 +31,9 @@ export const App: React.FC = () => {
       <AuthProvider>
         <ProfileProvider>
           <LocationProvider>
-            <AppContent />
+            <FeedProvider>
+              <AppContent />
+            </FeedProvider>
           </LocationProvider>
         </ProfileProvider>
       </AuthProvider>

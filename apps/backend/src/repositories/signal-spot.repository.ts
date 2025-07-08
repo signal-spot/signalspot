@@ -165,7 +165,7 @@ export class SignalSpotRepository implements ISignalSpotRepository {
     const offset = options.offset || 0;
     
     // Build base conditions
-    let whereConditions = ['s.is_active = true'];
+    const whereConditions = ['s.is_active = true'];
     const params: any[] = [coordinates.latitude, coordinates.longitude, radiusKm * 1000]; // Convert km to meters
 
     if (options.excludeExpired !== false) {
@@ -225,10 +225,8 @@ export class SignalSpotRepository implements ISignalSpotRepository {
 
   private mapRawResultsToEntities(rawResults: any[]): SignalSpot[] {
     return rawResults.map(row => {
-      const spot = new SignalSpot();
-      
-      // Map basic spot properties
-      Object.assign(spot, {
+      // Use MikroORM's entity manager to create the entity
+      const spot = this.em.create(SignalSpot, {
         id: row.id,
         message: row.message,
         title: row.title,
@@ -251,7 +249,8 @@ export class SignalSpotRepository implements ISignalSpotRepository {
         metadata: row.metadata,
         createdAt: new Date(row.created_at),
         updatedAt: new Date(row.updated_at),
-        expiresAt: new Date(row.expires_at)
+        expiresAt: new Date(row.expires_at),
+        creator: row.user_id
       });
 
       // Add distance if available

@@ -15,6 +15,9 @@ import { DesignSystem } from '../utils/designSystem';
 import { signalSpotService, SignalSpot, SpotInteractionRequest } from '../services/signalSpot.service';
 import { useAuth } from '../providers/AuthProvider';
 import { useLocation } from '../hooks/useLocation';
+import ShareButton from '../components/sharing/ShareButton';
+import { ShareContent } from '../services/share.service';
+import AnalyticsService from '../services/analytics.service';
 
 type SpotDetailScreenRouteProp = RouteProp<RootStackParamList, 'SpotDetail'>;
 
@@ -29,6 +32,8 @@ export const SpotDetailScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [interacting, setInteracting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  const analyticsService = AnalyticsService.getInstance();
 
   useEffect(() => {
     loadSpotDetails();
@@ -172,6 +177,32 @@ export const SpotDetailScreen: React.FC = () => {
     return signalSpotService.isSpotActive(spotData);
   };
 
+  const getShareContent = (): ShareContent | null => {
+    if (!spotData) return null;
+    
+    return {
+      type: 'spot',
+      title: spotData.title,
+      description: spotData.content,
+      url: `https://signalspot.app/spot/${spotData.id}`,
+      data: {
+        id: spotData.id,
+        type: spotData.type,
+        location: {
+          latitude: spotData.coordinates.latitude,
+          longitude: spotData.coordinates.longitude,
+        },
+      },
+    };
+  };
+
+  const handleSharePress = () => {
+    const shareContent = getShareContent();
+    if (shareContent) {
+      analyticsService.trackShareInitiated('spot', spotData!.id, 'modal');
+    }
+  };
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -281,13 +312,22 @@ export const SpotDetailScreen: React.FC = () => {
             <Text style={styles.engagementButtonText}>💬 댓글</Text>
           </TouchableOpacity>
           
-          <TouchableOpacity
-            style={styles.engagementButton}
-            onPress={() => handleInteraction('share')}
-            disabled={interacting}
-          >
-            <Text style={styles.engagementButtonText}>📤 공유</Text>
-          </TouchableOpacity>
+          {getShareContent() && (
+            <ShareButton
+              content={getShareContent()!}
+              authorName={spotData.creatorUsername}
+              stats={{
+                likes: spotData.likeCount,
+                comments: spotData.replyCount,
+                views: spotData.viewCount,
+              }}
+              variant="ghost"
+              size="medium"
+              style={styles.engagementButton}
+              textStyle={styles.engagementButtonText}
+              onPress={handleSharePress}
+            />
+          )}
         </View>
       </View>
 

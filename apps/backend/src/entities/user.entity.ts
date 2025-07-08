@@ -266,6 +266,11 @@ export abstract class AggregateRoot {
 
 // Rich Domain Entity
 @Entity()
+@Index({ properties: ['lastKnownLatitude', 'lastKnownLongitude', 'lastLocationUpdateAt'] }) // Spatial location queries
+@Index({ properties: ['status', 'isActive'] }) // User status queries
+@Index({ properties: ['profileCompletionPercentage', 'verificationStatus'] }) // Profile completion queries
+@Index({ properties: ['locationPrivacy', 'locationTrackingEnabled'] }) // Location privacy queries
+@Index({ properties: ['lastLoginAt', 'isActive'] }) // Active user queries
 export class User extends AggregateRoot {
   @PrimaryKey({ type: 'uuid' })
   @Index()
@@ -398,9 +403,11 @@ export class User extends AggregateRoot {
 
   // Location-related properties
   @Property({ type: 'boolean', default: false })
+  @Index()
   locationTrackingEnabled = false;
 
   @Property({ type: 'string', default: 'private' })
+  @Index()
   locationPrivacy = 'private'; // 'public', 'friends', 'private'
 
   @Property({ type: 'double', nullable: true })
@@ -443,6 +450,9 @@ export class User extends AggregateRoot {
 
   @Property({ default: false })
   accountLocked = false;
+
+  @Property({ nullable: true })
+  fcmToken?: string;
 
   @Property({ nullable: true })
   lockedUntil?: Date;

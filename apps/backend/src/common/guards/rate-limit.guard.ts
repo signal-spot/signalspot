@@ -39,7 +39,7 @@ export class RateLimitGuard implements CanActivate {
     }
 
     const request = context.switchToHttp().getRequest();
-    const key = this.generateKey(request, rateLimitOptions);
+    const key = this.generateKey(request);
     const now = Date.now();
 
     // Clean up expired entries
@@ -89,7 +89,7 @@ export class RateLimitGuard implements CanActivate {
     return true;
   }
 
-  private generateKey(request: any, options: RateLimitOptions): string {
+  private generateKey(request: any): string {
     // Use IP address and user ID (if available) for key generation
     const ip = request.ip || request.connection.remoteAddress;
     const userId = request.user?.id || 'anonymous';

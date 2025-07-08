@@ -103,14 +103,7 @@ export class FileUploadService {
     });
 
     // Process image with default profile image settings
-    const processedFile = await this.processImage(file, {
-      width: options.width || 400,
-      height: options.height || 400,
-      quality: options.quality || 85,
-      format: options.format || 'jpeg',
-      crop: options.crop !== false, // Default to true
-      ...options,
-    });
+    const processedFile = await this.processImage(file);
 
     // Upload processed image
     const result = await this.uploadFile(processedFile, {}, `profiles/${userId}`);
@@ -162,8 +155,7 @@ export class FileUploadService {
    * Processes an image with the given options
    */
   private async processImage(
-    file: Express.Multer.File,
-    _options: ImageProcessingOptions
+    file: Express.Multer.File
   ): Promise<Express.Multer.File> {
     // For now, return the original file
     // In a real implementation, you would use a library like sharp or jimp

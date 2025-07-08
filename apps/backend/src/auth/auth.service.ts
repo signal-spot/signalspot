@@ -10,7 +10,6 @@ import * as bcrypt from 'bcryptjs';
 import { User } from '../entities/user.entity';
 import { ConfigService } from '@nestjs/config';
 
-import { JwtPayload } from './strategies/jwt.strategy';
 
 export interface AuthTokens {
   accessToken: string;
@@ -198,7 +197,7 @@ export class AuthService {
       );
 
       return { accessToken };
-    } catch (error) {
+    } catch {
       throw new UnauthorizedException('Invalid refresh token');
     }
   }
@@ -262,7 +261,7 @@ export class AuthService {
     }
   }
 
-  async validateUser(payload: any): Promise<User | null> {
+  async validateUser(payload: { sub: string }): Promise<User | null> {
     const user = await this.em.findOne(User, { id: payload.sub });
     return user;
   }
@@ -313,7 +312,7 @@ export class AuthService {
       await this.em.flush();
 
       return { message: 'Email successfully verified' };
-    } catch (error) {
+    } catch {
       throw new BadRequestException('Invalid or expired verification token');
     }
   }

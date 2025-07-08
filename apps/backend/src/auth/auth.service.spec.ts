@@ -11,9 +11,7 @@ import * as bcrypt from 'bcryptjs';
 describe('AuthService', () => {
   let service: AuthService;
   let userService: jest.Mocked<UserService>;
-  let jwtService: jest.Mocked<JwtService>;
   let tokenService: jest.Mocked<TokenService>;
-  let emailService: jest.Mocked<EmailService>;
 
   const mockUser = {
     id: '123e4567-e89b-12d3-a456-426614174000',
@@ -71,9 +69,7 @@ describe('AuthService', () => {
 
     service = module.get<AuthService>(AuthService);
     userService = module.get(UserService);
-    jwtService = module.get(JwtService);
     tokenService = module.get(TokenService);
-    emailService = module.get(EmailService);
   });
 
   describe('register', () => {

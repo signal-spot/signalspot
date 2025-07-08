@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,252 +7,156 @@ import {
   TouchableOpacity,
   RefreshControl,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../providers/AuthProvider';
-import styled from 'styled-components/native';
+import { DesignSystem } from '../../utils/designSystem';
+import { Card, Avatar, Badge, Button } from '../../components/common';
+import { notificationService, NotificationType } from '../../services/notification.service';
 
-// Styled components
-const Container = styled.View`
-  flex: 1;
-  background-color: #f5f5f5;
-`;
-
-const HeaderContainer = styled.View`
-  background-color: #ffffff;
-  padding: 50px 20px 20px;
-  border-bottom-width: 1px;
-  border-bottom-color: #e0e0e0;
-`;
-
-const HeaderTitle = styled.Text`
-  font-size: 24px;
-  font-weight: bold;
-  color: #333;
-  text-align: center;
-  margin-bottom: 5px;
-`;
-
-const HeaderSubtitle = styled.Text`
-  font-size: 14px;
-  color: #666;
-  text-align: center;
-`;
-
-const SparkCard = styled.TouchableOpacity`
-  background-color: #ffffff;
-  margin: 10px 15px;
-  border-radius: 12px;
-  padding: 20px;
-  shadow-color: #000;
-  shadow-offset: 0px 2px;
-  shadow-opacity: 0.1;
-  shadow-radius: 3.84px;
-  elevation: 3;
-`;
-
-const SparkHeader = styled.View`
-  flex-direction: row;
-  align-items: center;
-  margin-bottom: 15px;
-`;
-
-const SparkIcon = styled.Text`
-  font-size: 24px;
-  margin-right: 10px;
-`;
-
-const SparkInfo = styled.View`
-  flex: 1;
-`;
-
-const SparkLocation = styled.Text`
-  font-size: 16px;
-  font-weight: bold;
-  color: #333;
-  margin-bottom: 2px;
-`;
-
-const SparkTime = styled.Text`
-  font-size: 12px;
-  color: #666;
-`;
-
-const SparkDetails = styled.Text`
-  font-size: 14px;
-  color: #666;
-  margin-bottom: 15px;
-`;
-
-const SparkActions = styled.View`
-  flex-direction: row;
-  justify-content: space-between;
-  gap: 10px;
-`;
-
-const ActionButton = styled.TouchableOpacity<{ variant?: 'primary' | 'secondary' }>`
-  flex: 1;
-  padding: 12px;
-  border-radius: 8px;
-  background-color: ${props => props.variant === 'primary' ? '#ff6b6b' : '#f0f0f0'};
-  align-items: center;
-`;
-
-const ActionButtonText = styled.Text<{ variant?: 'primary' | 'secondary' }>`
-  font-size: 14px;
-  font-weight: bold;
-  color: ${props => props.variant === 'primary' ? '#ffffff' : '#333333'};
-`;
-
-const EmptyStateContainer = styled.View`
-  flex: 1;
-  justify-content: center;
-  align-items: center;
-  padding: 40px;
-`;
-
-const EmptyStateIcon = styled.Text`
-  font-size: 60px;
-  margin-bottom: 20px;
-`;
-
-const EmptyStateTitle = styled.Text`
-  font-size: 18px;
-  font-weight: bold;
-  color: #333;
-  margin-bottom: 10px;
-  text-align: center;
-`;
-
-const EmptyStateSubtitle = styled.Text`
-  font-size: 14px;
-  color: #666;
-  text-align: center;
-  line-height: 20px;
-`;
-
-const TabContainer = styled.View`
-  flex-direction: row;
-  background-color: #ffffff;
-  padding: 15px;
-  border-bottom-width: 1px;
-  border-bottom-color: #e0e0e0;
-`;
-
-const TabButton = styled.TouchableOpacity<{ active?: boolean }>`
-  flex: 1;
-  padding: 10px;
-  align-items: center;
-  border-bottom-width: 2px;
-  border-bottom-color: ${props => props.active ? '#ff6b6b' : 'transparent'};
-`;
-
-const TabButtonText = styled.Text<{ active?: boolean }>`
-  font-size: 16px;
-  font-weight: bold;
-  color: ${props => props.active ? '#ff6b6b' : '#666'};
-`;
+const SparkTypeInfo = {
+  proximity: { icon: '👋', name: '근접', color: '#4CAF50' },
+  interest: { icon: '💭', name: '관심사', color: '#2196F3' },
+  location: { icon: '📍', name: '장소', color: '#FF9800' },
+  activity: { icon: '🎯', name: '활동', color: '#9C27B0' },
+};
 
 interface Spark {
   id: string;
-  type: 'potential' | 'confirmed' | 'declined';
-  location: {
-    name: string;
-    address: string;
+  type: 'proximity' | 'interest' | 'location' | 'activity';
+  otherUser: {
+    id: string;
+    username: string;
+    avatarUrl?: string;
+    age?: number;
   };
-  timestamp: string;
-  distance: number;
-  duration: number; // minutes spent in proximity
-  mutualInterests?: string[];
-  status: 'pending' | 'accepted' | 'declined' | 'expired';
+  strength: number;
+  distance?: number;
+  metadata: {
+    sharedInterests?: string[];
+    duration?: number;
+    detectionTime?: string;
+  };
+  status: 'pending' | 'accepted' | 'declined' | 'expired' | 'matched';
+  createdAt: string;
+  expiresAt: string;
+  userResponded: boolean;
+  isExpired: boolean;
 }
 
 const SparksScreen: React.FC = () => {
   const { user } = useAuth();
   const [sparks, setSparks] = useState<Spark[]>([]);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [activeTab, setActiveTab] = useState<'pending' | 'matched' | 'history'>('pending');
+  const [filter, setFilter] = useState<'all' | 'pending' | 'matched'>('all');
 
-  useEffect(() => {
-    loadSparks();
-  }, []);
-
-  const loadSparks = async () => {
+  const loadSparks = useCallback(async () => {
     try {
-      // TODO: Implement API call to fetch sparks
-      // Mock data for now
+      setLoading(true);
+      // In a real app, this would be an API call
+      // const response = await apiService.get('/sparks/my-sparks');
+      
+      // Mock data for development
       const mockSparks: Spark[] = [
         {
           id: '1',
-          type: 'potential',
-          location: {
-            name: '스타벅스 강남점',
-            address: '서울시 강남구 테헤란로',
+          type: 'proximity',
+          otherUser: {
+            id: 'user1',
+            username: '김민수',
+            avatarUrl: undefined,
+            age: 28,
           },
-          timestamp: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-          distance: 5,
-          duration: 15,
-          mutualInterests: ['커피', '독서', '음악'],
+          strength: 85,
+          distance: 25,
+          metadata: {
+            duration: 420,
+            detectionTime: new Date().toISOString(),
+          },
           status: 'pending',
+          createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+          expiresAt: new Date(Date.now() + 22 * 60 * 60 * 1000).toISOString(),
+          userResponded: false,
+          isExpired: false,
         },
         {
           id: '2',
-          type: 'confirmed',
-          location: {
-            name: '홍대 걷고싶은거리',
-            address: '서울시 마포구 홍대',
+          type: 'interest',
+          otherUser: {
+            id: 'user2',
+            username: '이지은',
+            avatarUrl: undefined,
+            age: 25,
           },
-          timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-          distance: 3,
-          duration: 25,
-          mutualInterests: ['음악', '예술', '영화'],
-          status: 'accepted',
-        },
-        {
-          id: '3',
-          type: 'potential',
-          location: {
-            name: '국립중앙도서관',
-            address: '서울시 서초구 반포대로',
+          strength: 92,
+          metadata: {
+            sharedInterests: ['코딩', '여행', '카페'],
           },
-          timestamp: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(),
-          distance: 8,
-          duration: 45,
-          mutualInterests: ['독서', '학습', '조용한 공간'],
-          status: 'pending',
+          status: 'matched',
+          createdAt: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
+          expiresAt: new Date(Date.now() + 19 * 60 * 60 * 1000).toISOString(),
+          userResponded: true,
+          isExpired: false,
         },
       ];
+      
+      // Simulate API delay
+      await new Promise(resolve => setTimeout(resolve, 1000));
       setSparks(mockSparks);
     } catch (error) {
-      console.error('Error loading sparks:', error);
-      Alert.alert('오류', '스파크 데이터를 불러올 수 없습니다.');
+      console.error('Failed to load sparks:', error);
+      Alert.alert('오류', '스파크를 불러오는데 실패했습니다.');
+    } finally {
+      setLoading(false);
     }
-  };
+  }, []);
 
-  const handleRefresh = async () => {
+  const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     await loadSparks();
     setRefreshing(false);
-  };
+  }, [loadSparks]);
 
-  const handleSparkAction = (sparkId: string, action: 'accept' | 'decline') => {
-    setSparks(prev => prev.map(spark => 
-      spark.id === sparkId 
-        ? { ...spark, status: action === 'accept' ? 'accepted' : 'declined' }
-        : spark
-    ));
-    
-    const actionText = action === 'accept' ? '수락했습니다' : '거절했습니다';
-    Alert.alert('스파크', `스파크를 ${actionText}.`);
+  const handleSparkResponse = async (sparkId: string, accepted: boolean) => {
+    try {
+      // In a real app, this would be an API call
+      // await apiService.post(`/sparks/${sparkId}/respond`, { accepted });
+      
+      setSparks(prev => 
+        prev.map(spark => 
+          spark.id === sparkId 
+            ? { 
+                ...spark, 
+                status: accepted ? 'matched' : 'declined',
+                userResponded: true 
+              }
+            : spark
+        )
+      );
+
+      if (accepted) {
+        Alert.alert(
+          '🎉 매칭 성공!',
+          '축하합니다! 새로운 매칭이 성사되었어요. 메시지를 보내보세요!',
+          [
+            { text: '나중에', style: 'cancel' },
+            { text: '메시지 보내기', onPress: () => {/* Navigate to chat */} },
+          ]
+        );
+      }
+    } catch (error) {
+      Alert.alert('오류', '응답 처리에 실패했습니다.');
+    }
   };
 
   const getFilteredSparks = () => {
-    switch (activeTab) {
+    switch (filter) {
       case 'pending':
         return sparks.filter(spark => spark.status === 'pending');
       case 'matched':
-        return sparks.filter(spark => spark.status === 'accepted');
-      case 'history':
-        return sparks.filter(spark => spark.status === 'declined' || spark.status === 'expired');
+        return sparks.filter(spark => spark.status === 'matched');
       default:
         return sparks;
     }
@@ -261,106 +165,198 @@ const SparksScreen: React.FC = () => {
   const getTimeAgo = (dateString: string) => {
     const now = new Date();
     const date = new Date(dateString);
-    const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60));
+    const diffInMs = now.getTime() - date.getTime();
+    const diffInHours = Math.floor(diffInMs / (1000 * 60 * 60));
     
-    if (diffInMinutes < 1) return '방금 전';
-    if (diffInMinutes < 60) return `${diffInMinutes}분 전`;
-    if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}시간 전`;
-    return `${Math.floor(diffInMinutes / 1440)}일 전`;
-  };
-
-  const getSparkIcon = (type: string) => {
-    switch (type) {
-      case 'potential':
-        return '✨';
-      case 'confirmed':
-        return '🎯';
-      default:
-        return '💫';
+    if (diffInHours < 1) {
+      const diffInMinutes = Math.floor(diffInMs / (1000 * 60));
+      return `${diffInMinutes}분 전`;
+    } else if (diffInHours < 24) {
+      return `${diffInHours}시간 전`;
+    } else {
+      const diffInDays = Math.floor(diffInHours / 24);
+      return `${diffInDays}일 전`;
     }
   };
+
+  const simulateNewSpark = () => {
+    notificationService.simulateNotification(NotificationType.SPARK_DETECTED, {
+      sparkId: 'new-spark',
+      otherUserId: 'user4',
+    });
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      loadSparks();
+    }, [loadSparks])
+  );
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={DesignSystem.colors.primary} />
+        <Text style={styles.loadingText}>스파크를 불러오는 중...</Text>
+      </View>
+    );
+  }
 
   const filteredSparks = getFilteredSparks();
 
   const renderSparkItem = ({ item }: { item: Spark }) => (
-    <SparkCard>
-      <SparkHeader>
-        <SparkIcon>{getSparkIcon(item.type)}</SparkIcon>
-        <SparkInfo>
-          <SparkLocation>{item.location.name}</SparkLocation>
-          <SparkTime>{getTimeAgo(item.timestamp)}</SparkTime>
-        </SparkInfo>
-      </SparkHeader>
-      
-      <SparkDetails>
-        📍 {item.location.address}{'\n'}
-        🕐 {item.duration}분 동안 근처에 있었음 • {item.distance}m 거리{'\n'}
-        {item.mutualInterests && `💫 공통 관심사: ${item.mutualInterests.join(', ')}`}
-      </SparkDetails>
-      
-      {item.status === 'pending' && (
-        <SparkActions>
-          <ActionButton variant="secondary" onPress={() => handleSparkAction(item.id, 'decline')}>
-            <ActionButtonText variant="secondary">거절</ActionButtonText>
-          </ActionButton>
-          <ActionButton variant="primary" onPress={() => handleSparkAction(item.id, 'accept')}>
-            <ActionButtonText variant="primary">수락</ActionButtonText>
-          </ActionButton>
-        </SparkActions>
+    <Card style={styles.sparkCard}>
+      <View style={styles.sparkHeader}>
+        <View style={styles.sparkUserInfo}>
+          <Avatar
+            name={item.otherUser.username}
+            size="large"
+            showBorder
+            borderColor={SparkTypeInfo[item.type].color}
+          />
+          <View style={styles.sparkUserDetails}>
+            <Text style={styles.sparkUsername}>
+              {item.otherUser.username}
+            </Text>
+            {item.otherUser.age && (
+              <Text style={styles.sparkUserAge}>
+                {item.otherUser.age}세
+              </Text>
+            )}
+          </View>
+        </View>
+        
+        <View style={styles.sparkMeta}>
+          <Badge 
+            variant={item.status === 'matched' ? 'success' : 'primary'}
+            style={[
+              styles.sparkTypeBadge,
+              { backgroundColor: SparkTypeInfo[item.type].color }
+            ]}
+          >
+            {SparkTypeInfo[item.type].icon} {SparkTypeInfo[item.type].name}
+          </Badge>
+          <Text style={styles.sparkStrength}>
+            강도: {item.strength}%
+          </Text>
+        </View>
+      </View>
+
+      {/* Spark Details */}
+      <View style={styles.sparkDetails}>
+        {item.distance && (
+          <Text style={styles.sparkDetailText}>
+            📍 거리: {item.distance}m
+          </Text>
+        )}
+        {item.metadata.duration && (
+          <Text style={styles.sparkDetailText}>
+            ⏱️ 지속시간: {Math.round(item.metadata.duration / 60)}분
+          </Text>
+        )}
+        {item.metadata.sharedInterests && (
+          <Text style={styles.sparkDetailText}>
+            💭 공통 관심사: {item.metadata.sharedInterests.join(', ')}
+          </Text>
+        )}
+      </View>
+
+      {/* Actions */}
+      {item.status === 'pending' && !item.userResponded && (
+        <View style={styles.sparkActions}>
+          <Button
+            variant="outline"
+            style={styles.actionButton}
+            onPress={() => handleSparkResponse(item.id, false)}
+          >
+            거절
+          </Button>
+          <Button
+            variant="primary"
+            style={styles.actionButton}
+            onPress={() => handleSparkResponse(item.id, true)}
+          >
+            수락
+          </Button>
+        </View>
       )}
-      
-      {item.status === 'accepted' && (
-        <SparkActions>
-          <ActionButton variant="primary" onPress={() => Alert.alert('채팅', '채팅 기능이 곧 구현됩니다!')}>
-            <ActionButtonText variant="primary">채팅하기</ActionButtonText>
-          </ActionButton>
-        </SparkActions>
+
+      {item.status === 'matched' && (
+        <View style={styles.matchedActions}>
+          <Button
+            variant="primary"
+            fullWidth
+            onPress={() => {/* Navigate to chat */}}
+          >
+            💬 메시지 보내기
+          </Button>
+        </View>
       )}
-    </SparkCard>
+
+      {/* Timestamp */}
+      <Text style={styles.sparkTimestamp}>
+        {getTimeAgo(item.createdAt)}
+      </Text>
+    </Card>
   );
 
   return (
-    <Container>
-      <HeaderContainer>
-        <HeaderTitle>스파크</HeaderTitle>
-        <HeaderSubtitle>근처에서 만난 특별한 연결들</HeaderSubtitle>
-      </HeaderContainer>
+    <View style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.title}>✨ 스파크</Text>
+        <Text style={styles.subtitle}>새로운 인연의 시작</Text>
+      </View>
 
-      <TabContainer>
-        <TabButton 
-          active={activeTab === 'pending'}
-          onPress={() => setActiveTab('pending')}
-        >
-          <TabButtonText active={activeTab === 'pending'}>대기 중</TabButtonText>
-        </TabButton>
-        <TabButton 
-          active={activeTab === 'matched'}
-          onPress={() => setActiveTab('matched')}
-        >
-          <TabButtonText active={activeTab === 'matched'}>매칭됨</TabButtonText>
-        </TabButton>
-        <TabButton 
-          active={activeTab === 'history'}
-          onPress={() => setActiveTab('history')}
-        >
-          <TabButtonText active={activeTab === 'history'}>히스토리</TabButtonText>
-        </TabButton>
-      </TabContainer>
+      {/* Filter Tabs */}
+      <View style={styles.filterContainer}>
+        {(['all', 'pending', 'matched'] as const).map((filterType) => (
+          <TouchableOpacity
+            key={filterType}
+            style={[
+              styles.filterTab,
+              filter === filterType && styles.filterTabActive,
+            ]}
+            onPress={() => setFilter(filterType)}
+          >
+            <Text
+              style={[
+                styles.filterTabText,
+                filter === filterType && styles.filterTabTextActive,
+              ]}
+            >
+              {filterType === 'all' && '전체'}
+              {filterType === 'pending' && '대기중'}
+              {filterType === 'matched' && '매칭됨'}
+            </Text>
+            {filterType === 'pending' && (
+              <Badge variant="danger" size="small">
+                {sparks.filter(s => s.status === 'pending').length}
+              </Badge>
+            )}
+          </TouchableOpacity>
+        ))}
+      </View>
 
+      {/* Sparks List */}
       {filteredSparks.length === 0 ? (
-        <EmptyStateContainer>
-          <EmptyStateIcon>✨</EmptyStateIcon>
-          <EmptyStateTitle>
-            {activeTab === 'pending' && '대기 중인 스파크가 없어요'}
-            {activeTab === 'matched' && '매칭된 스파크가 없어요'}
-            {activeTab === 'history' && '히스토리가 없어요'}
-          </EmptyStateTitle>
-          <EmptyStateSubtitle>
-            {activeTab === 'pending' && '근처를 돌아다니면서 새로운 스파크를 만나보세요!'}
-            {activeTab === 'matched' && '스파크를 수락해서 새로운 인연을 만들어보세요!'}
-            {activeTab === 'history' && '스파크를 경험하면 여기에 기록됩니다.'}
-          </EmptyStateSubtitle>
-        </EmptyStateContainer>
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyIcon}>✨</Text>
+          <Text style={styles.emptyTitle}>
+            {filter === 'pending' && '대기중인 스파크가 없어요'}
+            {filter === 'matched' && '매칭된 스파크가 없어요'}
+            {filter === 'all' && '아직 스파크가 없어요'}
+          </Text>
+          <Text style={styles.emptySubtitle}>
+            근처를 돌아다니며 새로운 인연을 만들어보세요!
+          </Text>
+          <Button 
+            onPress={simulateNewSpark}
+            variant="outline"
+            style={styles.simulateButton}
+          >
+            테스트 스파크 생성
+          </Button>
+        </View>
       ) : (
         <FlatList
           data={filteredSparks}
@@ -373,13 +369,156 @@ const SparksScreen: React.FC = () => {
           contentContainerStyle={styles.listContainer}
         />
       )}
-    </Container>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: DesignSystem.colors.background.primary,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: DesignSystem.colors.background.primary,
+  },
+  loadingText: {
+    ...DesignSystem.typography.body,
+    color: DesignSystem.colors.text.secondary,
+    marginTop: DesignSystem.spacing.md,
+  },
+  header: {
+    padding: DesignSystem.spacing.lg,
+    paddingTop: DesignSystem.spacing.xxl,
+    backgroundColor: DesignSystem.colors.background.primary,
+  },
+  title: {
+    ...DesignSystem.typography.largeTitle,
+    color: DesignSystem.colors.text.primary,
+    marginBottom: DesignSystem.spacing.xs,
+  },
+  subtitle: {
+    ...DesignSystem.typography.body,
+    color: DesignSystem.colors.text.secondary,
+  },
+  filterContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: DesignSystem.spacing.lg,
+    marginBottom: DesignSystem.spacing.md,
+  },
+  filterTab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: DesignSystem.spacing.md,
+    paddingHorizontal: DesignSystem.spacing.md,
+    backgroundColor: DesignSystem.colors.background.secondary,
+    marginHorizontal: DesignSystem.spacing.xs,
+    borderRadius: DesignSystem.borderRadius.md,
+    gap: DesignSystem.spacing.xs,
+  },
+  filterTabActive: {
+    backgroundColor: DesignSystem.colors.primary,
+  },
+  filterTabText: {
+    ...DesignSystem.typography.subheadline,
+    color: DesignSystem.colors.text.secondary,
+    fontWeight: '600',
+  },
+  filterTabTextActive: {
+    color: DesignSystem.colors.text.inverse,
+  },
   listContainer: {
-    paddingBottom: 20,
+    paddingHorizontal: DesignSystem.spacing.lg,
+    paddingBottom: DesignSystem.spacing.lg,
+  },
+  sparkCard: {
+    marginBottom: DesignSystem.spacing.md,
+  },
+  sparkHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: DesignSystem.spacing.md,
+  },
+  sparkUserInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  sparkUserDetails: {
+    marginLeft: DesignSystem.spacing.md,
+    flex: 1,
+  },
+  sparkUsername: {
+    ...DesignSystem.typography.headline,
+    color: DesignSystem.colors.text.primary,
+  },
+  sparkUserAge: {
+    ...DesignSystem.typography.subheadline,
+    color: DesignSystem.colors.text.secondary,
+  },
+  sparkMeta: {
+    alignItems: 'flex-end',
+  },
+  sparkTypeBadge: {
+    marginBottom: DesignSystem.spacing.xs,
+  },
+  sparkStrength: {
+    ...DesignSystem.typography.caption1,
+    color: DesignSystem.colors.text.secondary,
+    fontWeight: '600',
+  },
+  sparkDetails: {
+    marginBottom: DesignSystem.spacing.md,
+  },
+  sparkDetailText: {
+    ...DesignSystem.typography.subheadline,
+    color: DesignSystem.colors.text.secondary,
+    marginBottom: DesignSystem.spacing.xs,
+  },
+  sparkActions: {
+    flexDirection: 'row',
+    gap: DesignSystem.spacing.md,
+    marginBottom: DesignSystem.spacing.md,
+  },
+  actionButton: {
+    flex: 1,
+  },
+  matchedActions: {
+    marginBottom: DesignSystem.spacing.md,
+  },
+  sparkTimestamp: {
+    ...DesignSystem.typography.caption1,
+    color: DesignSystem.colors.text.tertiary,
+    textAlign: 'right',
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: DesignSystem.spacing.xxl * 2,
+  },
+  emptyIcon: {
+    fontSize: 64,
+    marginBottom: DesignSystem.spacing.lg,
+  },
+  emptyTitle: {
+    ...DesignSystem.typography.title2,
+    color: DesignSystem.colors.text.primary,
+    textAlign: 'center',
+    marginBottom: DesignSystem.spacing.sm,
+  },
+  emptySubtitle: {
+    ...DesignSystem.typography.body,
+    color: DesignSystem.colors.text.secondary,
+    textAlign: 'center',
+    marginBottom: DesignSystem.spacing.lg,
+  },
+  simulateButton: {
+    marginTop: DesignSystem.spacing.md,
   },
 });
 
