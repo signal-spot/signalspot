@@ -67,7 +67,7 @@ export class AnalyticsController {
     @Query('startDate', new ParseDatePipe({ optional: true })) startDate?: Date,
     @Query('endDate', new ParseDatePipe({ optional: true })) endDate?: Date,
   ): Promise<AnalyticsMetrics> {
-    this.logger.log(`Analytics metrics request for ${timeframe}`);\n    
+    this.logger.log(`Analytics metrics request for ${timeframe}`);
     try {
       return await this.analyticsService.getAnalyticsMetrics(timeframe, startDate, endDate);
     } catch (error) {
@@ -201,9 +201,9 @@ export class AnalyticsController {
   async exportAnalyticsData(
     @Query('format', new ParseEnumPipe(['json', 'csv', 'excel'])) format: 'json' | 'csv' | 'excel',
     @Query('timeframe', new ParseEnumPipe(['day', 'week', 'month'])) timeframe: 'day' | 'week' | 'month',
+    @Res() res: Response,
     @Query('startDate', new ParseDatePipe({ optional: true })) startDate?: Date,
     @Query('endDate', new ParseDatePipe({ optional: true })) endDate?: Date,
-    @Res() res: Response,
   ): Promise<void> {
     this.logger.log(`Analytics export request: ${format} format for ${timeframe}`);
     
@@ -319,7 +319,7 @@ export class AnalyticsController {
       trend: 'up' | 'down' | 'stable';
     }>;
     alerts: Array<{
-      level: 'info' | 'warning' | 'error';
+      level: 'info' | 'warning' | 'error' | 'critical';
       message: string;
       timestamp: Date;
     }>;

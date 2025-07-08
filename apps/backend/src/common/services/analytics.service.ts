@@ -228,7 +228,8 @@ export class AnalyticsService {
     const start = startDate || this.getStartDate(reportType, end);
 
     try {
-      const metrics = await this.getAnalyticsMetrics(reportType, start, end);
+      const timeframe = reportType === 'daily' ? 'day' : reportType === 'weekly' ? 'week' : reportType === 'monthly' ? 'month' : 'day';
+      const metrics = await this.getAnalyticsMetrics(timeframe, start, end);
       const trends = await this.calculateTrends(metrics);
       const insights = await this.generateInsights(metrics);
       const recommendations = await this.generateRecommendations(metrics);

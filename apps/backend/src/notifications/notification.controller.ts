@@ -128,7 +128,7 @@ export class NotificationController {
     );
 
     const unreadCount = await this.notificationRepository.count({
-      userId,
+      user: userId,
       status: { $in: [NotificationStatus.PENDING, NotificationStatus.DELIVERED] },
     });
 
@@ -152,7 +152,7 @@ export class NotificationController {
     
     const notification = await this.notificationRepository.findOne({
       id: notificationId,
-      userId,
+      user: userId,
     });
 
     if (!notification) {
@@ -173,7 +173,7 @@ export class NotificationController {
     
     const notifications = await this.notificationRepository.find({
       id: { $in: body.notificationIds },
-      userId,
+      user: userId,
     });
 
     notifications.forEach(notification => notification.markAsRead());
@@ -193,7 +193,7 @@ export class NotificationController {
     const userId = req.user.id;
     
     const notifications = await this.notificationRepository.find({
-      userId,
+      user: userId,
       status: { $in: [NotificationStatus.PENDING, NotificationStatus.DELIVERED] },
     });
 
@@ -215,7 +215,7 @@ export class NotificationController {
     
     const notification = await this.notificationRepository.findOne({
       id: notificationId,
-      userId,
+      user: userId,
     });
 
     if (!notification) {
@@ -419,12 +419,12 @@ export class NotificationController {
     const stats = await this.em.getConnection().execute(query, [userId, since]);
 
     const totalCount = await this.notificationRepository.count({
-      userId,
+      user: userId,
       createdAt: { $gte: since },
     });
 
     const unreadCount = await this.notificationRepository.count({
-      userId,
+      user: userId,
       status: { $in: [NotificationStatus.PENDING, NotificationStatus.DELIVERED] },
     });
 

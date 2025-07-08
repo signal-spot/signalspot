@@ -5,6 +5,9 @@ import { Location } from '../entities/location.entity';
 import { SignalSpot } from '../entities/signal-spot.entity';
 import { Spark } from '../spark/entities/spark.entity';
 import { LocationHistory } from '../spark/entities/location-history.entity';
+import { SacredSite } from '../sacred-site/entities/sacred-site.entity';
+import { SiteActivity } from '../sacred-site/entities/site-activity.entity';
+import { Notification } from '../notifications/entities/notification.entity';
 
 export const databaseConfig: Options = {
   driver: PostgreSqlDriver,
@@ -13,7 +16,7 @@ export const databaseConfig: Options = {
   user: process.env.DB_USERNAME || 'postgres',
   password: process.env.DB_PASSWORD || 'postgres',
   dbName: process.env.DB_DATABASE || 'signalspot',
-  entities: [User, Location, SignalSpot, Spark, LocationHistory],
+  entities: [User, Location, SignalSpot, Spark, LocationHistory, SacredSite, SiteActivity, Notification],
   debug: process.env.NODE_ENV !== 'production',
   migrations: {
     path: './migrations',

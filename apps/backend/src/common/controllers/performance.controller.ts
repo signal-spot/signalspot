@@ -344,7 +344,7 @@ export class PerformanceController {
       }
       
       const health = {
-        status: score > 80 ? 'healthy' : score > 60 ? 'warning' : 'critical' as const,
+        status: (score > 80 ? 'healthy' : score > 60 ? 'warning' : 'critical') as 'healthy' | 'warning' | 'critical',
         issues,
         score: Math.max(0, score),
       };

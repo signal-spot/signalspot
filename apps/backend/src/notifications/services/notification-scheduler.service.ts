@@ -263,9 +263,10 @@ export class NotificationSchedulerService {
    */
   @Cron(CronExpression.EVERY_MINUTE)
   async processPendingNotifications(): Promise<void> {
+    const em = this.em.fork();
     const now = new Date();
     
-    const pendingNotifications = await this.notificationRepository.find({
+    const pendingNotifications = await em.find(Notification, {
       status: NotificationStatus.PENDING,
       scheduledFor: { $lte: now },
       $or: [
@@ -289,7 +290,7 @@ export class NotificationSchedulerService {
           title: notification.title,
           body: notification.body,
           type: notification.type as any,
-          userId: notification.userId,
+          userId: notification.user.id,
           priority: notification.priority === NotificationPriority.HIGH ? 'high' : 'normal',
           data: notification.data || {},
           imageUrl: notification.imageUrl,
@@ -314,9 +315,10 @@ export class NotificationSchedulerService {
    */
   @Cron('0 2 * * *')
   async cleanupExpiredNotifications(): Promise<void> {
+    const em = this.em.fork();
     const now = new Date();
     
-    const expiredNotifications = await this.notificationRepository.find({
+    const expiredNotifications = await em.find(Notification, {
       $or: [
         { 
           status: NotificationStatus.PENDING,
@@ -344,8 +346,8 @@ export class NotificationSchedulerService {
       n => n.status === NotificationStatus.DELIVERED || n.status === NotificationStatus.READ
     );
     
-    this.em.remove(oldNotifications);
-    await this.em.flush();
+    em.remove(oldNotifications);
+    await em.flush();
 
     this.logger.log(
       `Cleaned up ${expiredPending.length} expired pending notifications and ` +
@@ -358,7 +360,8 @@ export class NotificationSchedulerService {
    */
   @Cron('*/30 * * * *')
   async retryFailedNotifications(): Promise<void> {
-    const failedNotifications = await this.notificationRepository.find({
+    const em = this.em.fork();
+    const failedNotifications = await em.find(Notification, {
       status: NotificationStatus.FAILED,
       retryCount: { $lt: 3 }, // Max 3 retries
       createdAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }, // Within last 24 hours
@@ -383,7 +386,7 @@ export class NotificationSchedulerService {
           title: notification.title,
           body: notification.body,
           type: notification.type as any,
-          userId: notification.userId,
+          userId: notification.user.id,
           priority: notification.priority === NotificationPriority.HIGH ? 'high' : 'normal',
           data: notification.data || {},
           imageUrl: notification.imageUrl,

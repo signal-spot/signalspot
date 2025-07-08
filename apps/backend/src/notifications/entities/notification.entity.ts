@@ -32,10 +32,10 @@ export enum NotificationPriority {
 }
 
 @Entity()
-@Index({ properties: ['userId', 'status', 'createdAt'] }) // User notification queries
+@Index({ properties: ['user', 'status', 'createdAt'] }) // User notification queries
 @Index({ properties: ['status', 'scheduledFor'] }) // Scheduled notification processing
 @Index({ properties: ['expiresAt', 'status'] }) // Expiration cleanup
-@Index({ properties: ['groupKey', 'userId', 'createdAt'] }) // Grouped notifications
+@Index({ properties: ['groupKey', 'user', 'createdAt'] }) // Grouped notifications
 @Index({ properties: ['type', 'createdAt'] }) // Notification type queries
 export class Notification {
   @PrimaryKey({ type: 'uuid' })
@@ -44,9 +44,6 @@ export class Notification {
   @ManyToOne(() => User)
   @Index()
   user: User;
-
-  @Property()
-  userId: string;
 
   @Enum(() => NotificationType)
   @Index()
@@ -141,7 +138,6 @@ export class Notification {
     metadata?: any;
   }) {
     this.user = data.user;
-    this.userId = data.user.id;
     this.type = data.type;
     this.title = data.title;
     this.body = data.body;

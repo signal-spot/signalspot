@@ -308,7 +308,7 @@ export class FeedService {
           ST_SetSRID(ST_MakePoint($${paramIndex}, $${paramIndex + 1}), 4326)::geography,
           $${paramIndex + 2}
         )`;
-        params.push(query.longitude, query.latitude, query.radiusMeters || 10000);
+        params.push(query.longitude.toString(), query.latitude.toString(), (query.radiusMeters || 10000).toString());
         paramIndex += 2;
       }
       
@@ -354,7 +354,7 @@ export class FeedService {
           ST_SetSRID(ST_MakePoint($${paramIndex}, $${paramIndex + 1}), 4326)::geography,
           $${paramIndex + 2}
         )`;
-        params.push(query.longitude, query.latitude, query.radiusMeters || 10000);
+        params.push(query.longitude.toString(), query.latitude.toString(), (query.radiusMeters || 10000).toString());
         paramIndex += 2;
       }
       

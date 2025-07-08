@@ -4,7 +4,10 @@ import { Repository } from 'typeorm';
 import { ExecutionContext } from '@nestjs/common';
 import { User } from '../../entities/user.entity';
 import { SignalSpot } from '../../entities/signal-spot.entity';
-import { Spark } from '../../spark/entities/spark.entity';
+import { Spark, SparkStatus } from '../../spark/entities/spark.entity';
+
+// Mock jest if it's not available
+declare const jest: any;
 
 /**
  * Mock repository factory for testing
@@ -61,16 +64,17 @@ export const createMockEntityManager = () => ({
  */
 export class UserFactory {
   static create(overrides: Partial<User> = {}): User {
-    const user = new User();
-    user.id = overrides.id || 'test-user-id';
-    user.email = overrides.email || 'test@example.com';
-    user.username = overrides.username || 'testuser';
-    user.isVerified = overrides.isVerified ?? true;
-    user.isActive = overrides.isActive ?? true;
-    user.createdAt = overrides.createdAt || new Date();
-    user.updatedAt = overrides.updatedAt || new Date();
-    
-    return Object.assign(user, overrides);
+    const user = {
+      id: overrides.id || 'test-user-id',
+      email: overrides.email || 'test@example.com',
+      username: overrides.username || 'testuser',
+      isVerified: overrides.isVerified ?? true,
+      isActive: overrides.isActive ?? true,
+      createdAt: overrides.createdAt || new Date(),
+      updatedAt: overrides.updatedAt || new Date(),
+      ...overrides
+    } as User;
+    return user;
   }
 
   static createMany(count: number, overrides: Partial<User> = {}): User[] {
@@ -99,20 +103,21 @@ export class UserFactory {
  */
 export class SignalSpotFactory {
   static create(overrides: Partial<SignalSpot> = {}): SignalSpot {
-    const spot = new SignalSpot();
-    spot.id = overrides.id || 'test-spot-id';
-    spot.userId = overrides.userId || 'test-user-id';
-    spot.title = overrides.title || 'Test Signal Spot';
-    spot.message = overrides.message || 'Test message';
-    spot.latitude = overrides.latitude || 37.7749;
-    spot.longitude = overrides.longitude || -122.4194;
-    spot.radiusMeters = overrides.radiusMeters || 100;
-    spot.status = overrides.status || 'active';
-    spot.expiresAt = overrides.expiresAt || new Date(Date.now() + 24 * 60 * 60 * 1000);
-    spot.createdAt = overrides.createdAt || new Date();
-    spot.updatedAt = overrides.updatedAt || new Date();
-    
-    return Object.assign(spot, overrides);
+    const spot = {
+      id: overrides.id || 'test-spot-id',
+      creator: overrides.creator || null,
+      title: overrides.title || 'Test Signal Spot',
+      message: overrides.message || 'Test message',
+      latitude: overrides.latitude || 37.7749,
+      longitude: overrides.longitude || -122.4194,
+      radiusInMeters: overrides.radiusInMeters || 100,
+      status: overrides.status || 'active',
+      expiresAt: overrides.expiresAt || new Date(Date.now() + 24 * 60 * 60 * 1000),
+      createdAt: overrides.createdAt || new Date(),
+      updatedAt: overrides.updatedAt || new Date(),
+      ...overrides
+    } as unknown as SignalSpot;
+    return spot;
   }
 
   static createMany(count: number, overrides: Partial<SignalSpot> = {}): SignalSpot[] {
@@ -151,7 +156,7 @@ export class SparkFactory {
     spark.user2Id = overrides.user2Id || 'test-user-2';
     spark.latitude = overrides.latitude || 37.7749;
     spark.longitude = overrides.longitude || -122.4194;
-    spark.status = overrides.status || 'pending';
+    spark.status = overrides.status || SparkStatus.PENDING;
     spark.createdAt = overrides.createdAt || new Date();
     spark.updatedAt = overrides.updatedAt || new Date();
     
@@ -652,7 +657,7 @@ export class TestDataGenerators {
       signalSpots.push(
         SignalSpotFactory.create({
           id: `spot-${i}`,
-          userId: randomUser.id,
+          creator: randomUser as any,
           latitude: coordinates.latitude,
           longitude: coordinates.longitude,
         })
