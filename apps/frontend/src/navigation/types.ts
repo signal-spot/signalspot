@@ -23,9 +23,9 @@ export type AuthStackParamList = {
 
 // Main Tab Navigation Types
 export type MainTabParamList = {
-  Map: undefined;
-  Sparks: undefined;
   MySignals: undefined;
+  Sparks: undefined;
+  Map: undefined;
   Profile: undefined;
 };
 
