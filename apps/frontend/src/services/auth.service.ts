@@ -39,7 +39,7 @@ export interface User {
 }
 
 const API_BASE_URL = __DEV__ 
-  ? 'http://localhost:3000/api' 
+  ? 'http://192.168.0.3:3000/api' 
   : 'https://api.signalspot.com/api';
 
 export interface LoginRequest {
