@@ -2,6 +2,8 @@ import { defineConfig } from '@mikro-orm/core';
 import { PostgreSqlDriver } from '@mikro-orm/postgresql';
 import { User } from './src/entities/user.entity';
 import { Location } from './src/entities/location.entity';
+import { SignalSpot } from './src/entities/signal-spot.entity';
+import { Notification } from './src/notifications/entities/notification.entity';
 import * as dotenv from 'dotenv';
 
 // Load environment variables
@@ -14,7 +16,7 @@ export default defineConfig({
   user: process.env.DB_USERNAME || 'postgres',
   password: process.env.DB_PASSWORD || 'postgres',
   dbName: process.env.DB_DATABASE || 'signalspot',
-  entities: [User, Location],
+  entities: [User, Location, SignalSpot, Notification],
   debug: process.env.NODE_ENV !== 'production',
   migrations: {
     path: './migrations',
