@@ -7,10 +7,9 @@ import { DesignSystem } from '../utils/designSystem';
 import { Badge } from '../components/common';
 
 // Import screens
-import FeedScreen from '../screens/main/FeedScreen';
 import MapScreen from '../screens/main/MapScreen';
 import SparksScreen from '../screens/main/SparksScreen';
-import MessagesScreen from '../screens/main/MessagesScreen';
+import MySignalsScreen from '../screens/main/MySignalsScreen';
 import ProfileScreen from '../screens/main/ProfileScreen';
 
 // Tab icon component with badge support
@@ -25,14 +24,12 @@ interface TabIconProps {
 const TabIcon: React.FC<TabIconProps> = ({ name, focused, color, size, badgeCount }) => {
   const getIconName = () => {
     switch (name) {
-      case 'Feed':
-        return focused ? 'heart' : 'heart-outline';
       case 'Map':
         return focused ? 'map' : 'map-outline';
       case 'Sparks':
         return focused ? 'flash' : 'flash-outline';
-      case 'Messages':
-        return focused ? 'chatbubbles' : 'chatbubbles-outline';
+      case 'MySignals':
+        return focused ? 'document-text' : 'document-text-outline';
       case 'Profile':
         return focused ? 'person' : 'person-outline';
       default:
@@ -67,12 +64,12 @@ const Tab = createBottomTabNavigator<MainTabParamList>();
 
 export const MainTabNavigator: React.FC = () => {
   // Mock data for badge counts - in real app, this would come from context/redux
-  const unreadMessages = 3;
   const newSparks = 5;
+  const newSignals = 3;
 
   return (
     <Tab.Navigator
-      initialRouteName="Feed"
+      initialRouteName="Map"
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: DesignSystem.colors.primary,
@@ -96,16 +93,6 @@ export const MainTabNavigator: React.FC = () => {
         },
       }}
     >
-      <Tab.Screen 
-        name="Feed" 
-        component={FeedScreen}
-        options={{
-          title: '오늘의 인연',
-          tabBarIcon: ({ focused, color, size }) => (
-            <TabIcon name="Feed" focused={focused} color={color} size={size} />
-          ),
-        }}
-      />
       <Tab.Screen 
         name="Map" 
         component={MapScreen}
@@ -135,14 +122,14 @@ export const MainTabNavigator: React.FC = () => {
         }}
       />
       <Tab.Screen 
-        name="Messages" 
-        component={MessagesScreen}
+        name="MySignals" 
+        component={MySignalsScreen}
         options={{
-          title: '메시지',
+          title: '내 시그널',
           tabBarIcon: ({ focused, color, size }) => (
-            <TabIcon name="Messages" focused={focused} color={color} size={size} badgeCount={unreadMessages} />
+            <TabIcon name="MySignals" focused={focused} color={color} size={size} badgeCount={newSignals} />
           ),
-          tabBarBadge: unreadMessages > 0 ? unreadMessages : undefined,
+          tabBarBadge: newSignals > 0 ? newSignals : undefined,
           tabBarBadgeStyle: {
             backgroundColor: DesignSystem.colors.danger,
             ...DesignSystem.typography.caption2,
