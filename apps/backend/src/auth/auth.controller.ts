@@ -9,22 +9,17 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
-import { AuthService, LoginDto, RegisterDto, AuthResponse } from './auth.service';
+import { AuthService, AuthResponse } from './auth.service';
+import { 
+  RegisterDto, 
+  LoginDto, 
+  RefreshTokenDto, 
+  EmailVerificationDto, 
+  ResendVerificationDto 
+} from './dto/auth.dto';
 import { GetUser } from './decorators/get-user.decorator';
 import { User } from '../entities/user.entity';
 import { RateLimitGuard, RateLimit } from '../common/guards/rate-limit.guard';
-
-class RefreshTokenDto {
-  refreshToken: string;
-}
-
-class EmailVerificationDto {
-  token: string;
-}
-
-class ResendVerificationDto {
-  email: string;
-}
 
 @ApiTags('Authentication')
 @Controller('auth')

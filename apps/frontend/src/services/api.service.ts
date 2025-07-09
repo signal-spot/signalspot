@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Base API configuration
 const API_BASE_URL = __DEV__ 
-  ? 'http://localhost:3001/api' 
+  ? 'http://localhost:3000/api' 
   : 'https://api.signalspot.com/api';
 
 // Common interfaces

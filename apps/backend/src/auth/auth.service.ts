@@ -9,6 +9,7 @@ import { EntityManager } from '@mikro-orm/core';
 import * as bcrypt from 'bcryptjs';
 import { User } from '../entities/user.entity';
 import { ConfigService } from '@nestjs/config';
+import { RegisterDto, LoginDto } from './dto/auth.dto';
 
 
 export interface AuthTokens {
@@ -44,16 +45,6 @@ export interface AuthResponse {
   };
 }
 
-export class LoginDto {
-  email: string;
-  password: string;
-}
-
-export class RegisterDto {
-  email: string;
-  password: string;
-  username: string;
-}
 
 @Injectable()
 export class AuthService {
