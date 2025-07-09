@@ -143,15 +143,15 @@ class AuthService {
 
   // Authentication Methods
   async login(credentials: LoginRequest): Promise<AuthResponse> {
-    const response = await apiService.post<AuthResponse>('/auth/login', credentials, 'login');
-    await this.storeAuthData(response);
-    return response;
+    const response = await apiService.post<{ data: AuthResponse }>('/auth/login', credentials, 'login');
+    await this.storeAuthData(response.data);
+    return response.data;
   }
 
   async register(userData: RegisterRequest): Promise<AuthResponse> {
-    const response = await apiService.post<AuthResponse>('/auth/register', userData, 'register');
-    await this.storeAuthData(response);
-    return response;
+    const response = await apiService.post<{ data: AuthResponse }>('/auth/register', userData, 'register');
+    await this.storeAuthData(response.data);
+    return response.data;
   }
 
   async logout(): Promise<void> {
@@ -287,9 +287,13 @@ class AuthService {
     }
   }
 
-  async setCurrentUser(user: User): Promise<void> {
+  async setCurrentUser(user: User | null): Promise<void> {
     try {
-      await AsyncStorage.setItem(this.USER_KEY, JSON.stringify(user));
+      if (user === null || user === undefined) {
+        await AsyncStorage.removeItem(this.USER_KEY);
+      } else {
+        await AsyncStorage.setItem(this.USER_KEY, JSON.stringify(user));
+      }
     } catch (error) {
       console.error('Failed to set current user:', error);
     }
@@ -307,7 +311,7 @@ class AuthService {
     await Promise.all([
       this.setAccessToken(authResponse.accessToken),
       this.setRefreshToken(authResponse.refreshToken),
-      this.setCurrentUser(authResponse.user as User),
+      this.setCurrentUser(authResponse.user || null),
     ]);
   }
 
