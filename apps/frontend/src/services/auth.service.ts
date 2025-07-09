@@ -251,9 +251,13 @@ class AuthService {
     }
   }
 
-  async setAccessToken(token: string): Promise<void> {
+  async setAccessToken(token: string | null): Promise<void> {
     try {
-      await AsyncStorage.setItem(this.ACCESS_TOKEN_KEY, token);
+      if (token === null || token === undefined) {
+        await AsyncStorage.removeItem(this.ACCESS_TOKEN_KEY);
+      } else {
+        await AsyncStorage.setItem(this.ACCESS_TOKEN_KEY, token);
+      }
     } catch (error) {
       console.error('Failed to set access token:', error);
     }
@@ -268,9 +272,13 @@ class AuthService {
     }
   }
 
-  async setRefreshToken(token: string): Promise<void> {
+  async setRefreshToken(token: string | null): Promise<void> {
     try {
-      await AsyncStorage.setItem(this.REFRESH_TOKEN_KEY, token);
+      if (token === null || token === undefined) {
+        await AsyncStorage.removeItem(this.REFRESH_TOKEN_KEY);
+      } else {
+        await AsyncStorage.setItem(this.REFRESH_TOKEN_KEY, token);
+      }
     } catch (error) {
       console.error('Failed to set refresh token:', error);
     }

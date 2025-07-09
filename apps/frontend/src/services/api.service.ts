@@ -1,3 +1,4 @@
+import React from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Base API configuration
@@ -107,9 +108,13 @@ export class ApiService {
     }
   }
 
-  async setAccessToken(token: string): Promise<void> {
+  async setAccessToken(token: string | null): Promise<void> {
     try {
-      await AsyncStorage.setItem(this.ACCESS_TOKEN_KEY, token);
+      if (token === null || token === undefined) {
+        await AsyncStorage.removeItem(this.ACCESS_TOKEN_KEY);
+      } else {
+        await AsyncStorage.setItem(this.ACCESS_TOKEN_KEY, token);
+      }
     } catch (error) {
       console.error('Failed to set access token:', error);
     }

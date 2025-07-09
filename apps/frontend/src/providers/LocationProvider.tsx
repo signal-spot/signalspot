@@ -348,9 +348,12 @@ export const LocationProvider: React.FC<LocationProviderProps> = ({ children }) 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      locationService.cleanup();
+      // Stop tracking if active
+      if (isTracking) {
+        locationService.stopTracking();
+      }
     };
-  }, []);
+  }, [isTracking]);
 
   const contextValue: LocationContextType = {
     // Current location state
