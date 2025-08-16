@@ -2,7 +2,8 @@ version: '3.8'
 
 services:
   postgres:
-    image: postgis/postgis:14-3.2
+    image: postgres:14-alpine
+    platform: linux/arm64
     container_name: signalspot-postgres
     restart: always
     ports:
