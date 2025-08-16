@@ -11,15 +11,15 @@ services:
     ports:
       - "${DB_PORT:-5432}:5432"
     environment:
-      POSTGRES_DB: ${DB_DATABASE:-${DB_NAME:-signalspot}}
-      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_DB: ${DB_DATABASE:-${DB_NAME}}
+      POSTGRES_USER: ${DB_USERNAME}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_HOST_AUTH_METHOD: md5
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ../../init-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-postgres} -d ${DB_DATABASE:-${DB_NAME:-signalspot}}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d ${DB_DATABASE:-${DB_NAME}}"]
       interval: 10s
       timeout: 5s
       retries: 5
