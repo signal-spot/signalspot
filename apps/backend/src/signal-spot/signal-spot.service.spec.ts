@@ -11,28 +11,30 @@ import { CreateSpotDto } from './dto/create-spot.dto';
 import { LoggerService } from '../common/services/logger.service';
 import { SignalSpot, SpotType, SpotVisibility } from '../entities/signal-spot.entity';
 import { User } from '../entities/user.entity';
+import { ref } from '@mikro-orm/core';
 
 describe('SignalSpotService', () => {
   let service: SignalSpotService;
   let repository: jest.Mocked<ISignalSpotRepository>;
   let eventEmitter: jest.Mocked<EventEmitter2>;
 
-  const mockUser: Partial<User> = {
+  const mockUser = {
     id: 'user-123',
     username: 'testuser',
     email: 'test@example.com',
-  };
+  } as User;
 
-  const mockSignalSpot: Partial<SignalSpot> = {
+  const mockSignalSpot = {
     id: 'spot-123',
     latitude: 37.5665,
     longitude: 126.978,
     title: 'Test Signal Spot',
     content: 'This is a test signal spot',
+    message: 'This is a test signal spot',
     type: SpotType.SOCIAL,
     visibility: SpotVisibility.PUBLIC,
     radiusInMeters: 100,
-    creator: mockUser as User,
+    creator: ref(mockUser),
     creatorId: mockUser.id,
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -48,6 +50,8 @@ describe('SignalSpotService', () => {
     canBeRemovedBy: jest.fn().mockReturnValue(true),
     canInteract: jest.fn().mockReturnValue(true),
     recordView: jest.fn(),
+    _domainEvents: [],
+    addDomainEvent: jest.fn(),
     toggleLike: jest.fn().mockReturnValue(true),
     updateContent: jest.fn(),
     updateTags: jest.fn(),
@@ -159,9 +163,9 @@ describe('SignalSpotService', () => {
     };
 
     it('should successfully create a signal spot', async () => {
-      repository.save.mockResolvedValue(mockSignalSpot as SignalSpot);
+      repository.save.mockResolvedValue(mockSignalSpot as unknown as unknown as SignalSpot);
 
-      const result = await service.createSpot(mockUser as User, createDto);
+      const result = await service.createSpot(mockUser, createDto);
 
       expect(repository.save).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -180,7 +184,7 @@ describe('SignalSpotService', () => {
     it('should throw BadRequestException for invalid coordinates', async () => {
       const invalidDto = { ...createDto, latitude: 91 };
 
-      await expect(service.createSpot(mockUser as User, invalidDto)).rejects.toThrow(
+      await expect(service.createSpot(mockUser, invalidDto)).rejects.toThrow(
         BadRequestException
       );
     });
@@ -188,7 +192,7 @@ describe('SignalSpotService', () => {
     it('should throw BadRequestException for invalid radius', async () => {
       const invalidDto = { ...createDto, radiusInMeters: 10001 };
 
-      await expect(service.createSpot(mockUser as User, invalidDto)).rejects.toThrow(
+      await expect(service.createSpot(mockUser, invalidDto)).rejects.toThrow(
         BadRequestException
       );
     });
@@ -204,9 +208,9 @@ describe('SignalSpotService', () => {
 
     it('should find nearby signal spots', async () => {
       const mockSpots = [mockSignalSpot, { ...mockSignalSpot, id: 'spot-456' }];
-      repository.findNearby.mockResolvedValue(mockSpots as SignalSpot[]);
+      repository.findNearby.mockResolvedValue(mockSpots as unknown as SignalSpot[]);
 
-      const result = await service.getSpotsNearLocation(mockUser as User, nearbyQuery);
+      const result = await service.getSpotsNearLocation(mockUser, nearbyQuery);
 
       expect(repository.findNearby).toHaveBeenCalledWith(
         nearbyQuery.latitude,
@@ -221,17 +225,17 @@ describe('SignalSpotService', () => {
     });
 
     it('should filter by spot types if provided', async () => {
-      const queryWithTypes = { ...nearbyQuery, types: ['social', 'event'] };
+      const queryWithTypes = { ...nearbyQuery, types: [SpotType.SOCIAL, SpotType.MEETUP] };
       repository.findNearby.mockResolvedValue([]);
 
-      await service.getSpotsNearLocation(mockUser as User, queryWithTypes);
+      await service.getSpotsNearLocation(mockUser, queryWithTypes as any);
 
       expect(repository.findNearby).toHaveBeenCalledWith(
         expect.any(Number),
         expect.any(Number),
         expect.any(Number),
         expect.objectContaining({
-          types: ['social', 'event'],
+          types: [SpotType.SOCIAL, SpotType.MEETUP],
         })
       );
     });
@@ -239,9 +243,9 @@ describe('SignalSpotService', () => {
 
   describe('getSpotById', () => {
     it('should find a signal spot by id', async () => {
-      repository.findById.mockResolvedValue(mockSignalSpot as SignalSpot);
+      repository.findById.mockResolvedValue(mockSignalSpot as unknown as SignalSpot);
 
-      const result = await service.getSpotById('spot-123', mockUser as User);
+      const result = await service.getSpotById('spot-123', mockUser);
 
       expect(repository.findById).toHaveBeenCalledWith(expect.any(Object));
       expect(result).toEqual(mockSignalSpot);
@@ -250,7 +254,7 @@ describe('SignalSpotService', () => {
     it('should return null for non-existent spot', async () => {
       repository.findById.mockResolvedValue(null);
 
-      const result = await service.getSpotById('non-existent', mockUser as User);
+      const result = await service.getSpotById('non-existent', mockUser);
       
       expect(result).toBeNull();
     });
@@ -258,16 +262,16 @@ describe('SignalSpotService', () => {
 
   describe('interactWithSpot', () => {
     it('should handle like interaction', async () => {
-      repository.findById.mockResolvedValue(mockSignalSpot as SignalSpot);
+      repository.findById.mockResolvedValue(mockSignalSpot as unknown as SignalSpot);
       repository.save.mockResolvedValue({
         ...mockSignalSpot,
         likeCount: 1,
-      } as SignalSpot);
+      } as unknown as SignalSpot);
 
       const result = await service.interactWithSpot(
         'spot-123',
         { type: 'like' },
-        mockUser as User
+        mockUser
       );
 
       expect(repository.save).toHaveBeenCalledWith(
@@ -285,16 +289,16 @@ describe('SignalSpotService', () => {
     });
 
     it('should handle report interaction', async () => {
-      repository.findById.mockResolvedValue(mockSignalSpot as SignalSpot);
+      repository.findById.mockResolvedValue(mockSignalSpot as unknown as SignalSpot);
       repository.save.mockResolvedValue({
         ...mockSignalSpot,
         reportCount: 1,
-      } as SignalSpot);
+      } as unknown as SignalSpot);
 
       const result = await service.interactWithSpot(
         'spot-123',
         { type: 'report', reason: 'inappropriate' },
-        mockUser as User
+        mockUser
       );
 
       expect(repository.save).toHaveBeenCalledWith(
@@ -307,7 +311,7 @@ describe('SignalSpotService', () => {
       repository.findById.mockResolvedValue(null);
 
       await expect(
-        service.interactWithSpot('non-existent', { type: 'like' }, mockUser as User)
+        service.interactWithSpot('non-existent', { type: 'like' }, mockUser)
       ).rejects.toThrow(NotFoundException);
     });
   });
@@ -319,13 +323,13 @@ describe('SignalSpotService', () => {
     };
 
     it('should update a signal spot', async () => {
-      repository.findById.mockResolvedValue(mockSignalSpot as SignalSpot);
+      repository.findById.mockResolvedValue(mockSignalSpot as unknown as SignalSpot);
       repository.save.mockResolvedValue({
         ...mockSignalSpot,
         ...updateDto,
-      } as SignalSpot);
+      } as unknown as SignalSpot);
 
-      const result = await service.updateSpot('spot-123', updateDto, mockUser as User);
+      const result = await service.updateSpot('spot-123', updateDto, mockUser);
 
       expect(repository.save).toHaveBeenCalledWith(expect.any(Object));
       expect(result.title).toBe(updateDto.title);
@@ -335,25 +339,25 @@ describe('SignalSpotService', () => {
       repository.findById.mockResolvedValue(null);
 
       await expect(
-        service.updateSpot('non-existent', updateDto, mockUser as User)
+        service.updateSpot('non-existent', updateDto, mockUser)
       ).rejects.toThrow(NotFoundException);
     });
 
     it('should throw BadRequestException for unauthorized update', async () => {
-      const otherUser = { ...mockUser, id: 'other-user' };
-      repository.findById.mockResolvedValue(mockSignalSpot as SignalSpot);
+      const otherUser = { id: 'other-user', username: 'otheruser', email: 'other@example.com' } as User;
+      repository.findById.mockResolvedValue(mockSignalSpot as unknown as SignalSpot);
 
       await expect(
-        service.updateSpot('spot-123', updateDto, otherUser as User)
+        service.updateSpot('spot-123', updateDto, otherUser)
       ).rejects.toThrow(BadRequestException);
     });
   });
 
   describe('removeSpot', () => {
     it('should delete a signal spot', async () => {
-      repository.findById.mockResolvedValue(mockSignalSpot as SignalSpot);
+      repository.findById.mockResolvedValue(mockSignalSpot as unknown as SignalSpot);
 
-      await service.removeSpot('spot-123', mockUser as User);
+      await service.removeSpot('spot-123', mockUser);
 
       expect(repository.remove).toHaveBeenCalledWith(mockSignalSpot);
       expect(eventEmitter.emit).toHaveBeenCalledWith(
@@ -366,16 +370,16 @@ describe('SignalSpotService', () => {
       repository.findById.mockResolvedValue(null);
 
       await expect(
-        service.removeSpot('non-existent', mockUser as User)
+        service.removeSpot('non-existent', mockUser)
       ).rejects.toThrow(NotFoundException);
     });
 
     it('should throw BadRequestException for unauthorized delete', async () => {
-      const otherUser = { ...mockUser, id: 'other-user' };
-      repository.findById.mockResolvedValue(mockSignalSpot as SignalSpot);
+      const otherUser = { id: 'other-user', username: 'otheruser', email: 'other@example.com' } as User;
+      repository.findById.mockResolvedValue(mockSignalSpot as unknown as SignalSpot);
 
       await expect(
-        service.removeSpot('spot-123', otherUser as User)
+        service.removeSpot('spot-123', otherUser)
       ).rejects.toThrow(BadRequestException);
     });
   });
@@ -387,7 +391,7 @@ describe('SignalSpotService', () => {
         { ...mockSignalSpot, type: 'social' },
         { ...mockSignalSpot, type: 'event' },
         { ...mockSignalSpot, type: 'social' },
-      ] as SignalSpot[]);
+      ] as unknown as SignalSpot[]);
 
       const result = await service.getLocationStatistics(37.5665, 126.978, 1);
 
