@@ -1,4 +1,5 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, OnModuleInit } from '@nestjs/common';
+import { LoggerService } from '../common/services/logger.service';
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityRepository, EntityManager } from '@mikro-orm/core';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
@@ -9,7 +10,8 @@ let admin: any;
 try {
   admin = require('firebase-admin');
 } catch (error) {
-  console.warn('Firebase admin not available, push notifications will be disabled');
+  const tempLogger = new LoggerService();
+  tempLogger.warn('Firebase admin not available, push notifications will be disabled', 'NotificationService');
   admin = null;
 }
 
@@ -19,17 +21,9 @@ import {
   Notification, 
   NotificationStatus, 
   NotificationPriority,
-  NotificationType as EntityNotificationType
+  NotificationType
 } from './entities/notification.entity';
 
-export enum NotificationType {
-  SPARK_DETECTED = 'spark_detected',
-  SPARK_MATCHED = 'spark_matched',
-  MESSAGE_RECEIVED = 'message_received',
-  SIGNAL_SPOT_NEARBY = 'signal_spot_nearby',
-  PROFILE_VISITED = 'profile_visited',
-  SYSTEM_ANNOUNCEMENT = 'system_announcement',
-}
 
 export interface NotificationPayload {
   title: string;
@@ -45,7 +39,6 @@ export interface NotificationPayload {
 
 @Injectable()
 export class NotificationService implements OnModuleInit {
-  private readonly logger = new Logger(NotificationService.name);
   private firebaseApp: any;
 
   constructor(
@@ -54,37 +47,90 @@ export class NotificationService implements OnModuleInit {
     private readonly em: EntityManager,
     private readonly configService: ConfigService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly logger: LoggerService,
   ) {
-    this.initializeFirebase();
+    // Initialize Firebase in onModuleInit instead
   }
 
   private initializeFirebase() {
     try {
+      // Check if Firebase Admin is available
+      if (!admin) {
+        this.logger.warn('Firebase Admin SDK not available', 'NotificationService');
+        return;
+      }
+
+      // Check if already initialized
+      if (admin.apps.length > 0) {
+        this.firebaseApp = admin.app();
+        this.logger.log('Firebase Admin SDK already initialized', 'NotificationService');
+        return;
+      }
+
       // Initialize Firebase Admin SDK
       const serviceAccount = this.configService.get('firebase.serviceAccount');
       
       if (!serviceAccount) {
-        this.logger.warn('Firebase service account not configured');
+        this.logger.warn('Firebase service account not configured', 'NotificationService');
         return;
       }
 
+      // Validate service account has required properties
+      if (!serviceAccount.private_key || typeof serviceAccount.private_key !== 'string') {
+        this.logger.error('Invalid Firebase service account: missing or invalid private_key', null, 'NotificationService');
+        this.logger.error(`private_key exists: ${!!serviceAccount.private_key}, type: ${typeof serviceAccount.private_key}`, null, 'NotificationService');
+        
+        // Check if it's an empty string or placeholder
+        if (serviceAccount.private_key === '') {
+          this.logger.error('private_key is an empty string', null, 'NotificationService');
+        } else if (serviceAccount.private_key && !serviceAccount.private_key.includes('-----BEGIN')) {
+          this.logger.error('private_key does not contain valid PEM format', null, 'NotificationService');
+        }
+        return;
+      }
+
+      if (!serviceAccount.client_email || typeof serviceAccount.client_email !== 'string') {
+        this.logger.error('Invalid Firebase service account: missing or invalid client_email', null, 'NotificationService');
+        return;
+      }
+
+      if (!serviceAccount.project_id || typeof serviceAccount.project_id !== 'string') {
+        this.logger.error('Invalid Firebase service account: missing or invalid project_id', null, 'NotificationService');
+        return;
+      }
+
+      // Initialize with validated service account
       this.firebaseApp = admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount),
-        projectId: this.configService.get('firebase.projectId'),
+        credential: admin.credential.cert({
+          projectId: serviceAccount.project_id,
+          clientEmail: serviceAccount.client_email,
+          privateKey: serviceAccount.private_key.replace(/\\n/g, '\n'), // Handle escaped newlines
+        }),
+        projectId: serviceAccount.project_id,
       });
 
-      this.logger.log('Firebase Admin SDK initialized');
+      this.logger.log('Firebase Admin SDK initialized successfully', 'NotificationService');
     } catch (error) {
-      this.logger.error('Failed to initialize Firebase:', error);
+      this.logger.error('Failed to initialize Firebase Admin SDK:', error.message, 'NotificationService');
+      this.logger.error(error.stack, null, 'NotificationService');
+      throw new Error('Firebase Admin SDK initialization failed. Push notifications are required.');
     }
   }
 
   async sendNotification(payload: NotificationPayload): Promise<boolean> {
     try {
+      this.logger.debug(`sendNotification called with payload: ${JSON.stringify(payload)}`, 'NotificationService');
+      
+      // Check if Firebase Admin is available
+      if (!admin || !this.firebaseApp) {
+        this.logger.warn('Firebase Admin SDK not initialized, skipping notification', 'NotificationService');
+        return false;
+      }
+
       const user = await this.userRepository.findOne({ id: payload.userId });
 
       if (!user?.fcmToken) {
-        this.logger.debug(`No FCM token for user ${payload.userId}`);
+        this.logger.debug(`No FCM token for user ${payload.userId}`, 'NotificationService');
         return false;
       }
 
@@ -126,14 +172,14 @@ export class NotificationService implements OnModuleInit {
       };
 
       const response = await admin.messaging().send(message);
-      this.logger.debug(`Notification sent successfully: ${response}`);
+      this.logger.debug(`Notification sent successfully: ${response}`, 'NotificationService');
 
       // Store notification in database for history
       await this.storeNotification(payload);
 
       return true;
     } catch (error) {
-      this.logger.error('Failed to send notification:', error);
+      this.logger.error('Failed to send notification', error.stack, 'NotificationService');
       return false;
     }
   }
@@ -147,7 +193,7 @@ export class NotificationService implements OnModuleInit {
       result => result.status === 'fulfilled' && result.value === true
     ).length;
 
-    this.logger.log(`Sent ${successCount}/${payloads.length} bulk notifications`);
+    this.logger.log(`Sent ${successCount}/${payloads.length} bulk notifications`, 'NotificationService');
     return successCount;
   }
 
@@ -160,11 +206,11 @@ export class NotificationService implements OnModuleInit {
           title: '✨ 새로운 스파크 발견!',
           body: `근처에서 새로운 인연의 스파크를 발견했어요!`,
           type: NotificationType.SPARK_DETECTED,
-          userId: spark.user1Id,
+          userId: spark.user1.id,
           priority: 'high',
           data: {
             sparkId: spark.id,
-            otherUserId: spark.user2Id,
+            otherUserId: spark.user2.id,
             sparkType: spark.type,
             strength: spark.strength.toString(),
           },
@@ -173,11 +219,11 @@ export class NotificationService implements OnModuleInit {
           title: '✨ 새로운 스파크 발견!',
           body: `근처에서 새로운 인연의 스파크를 발견했어요!`,
           type: NotificationType.SPARK_DETECTED,
-          userId: spark.user2Id,
+          userId: spark.user2.id,
           priority: 'high',
           data: {
             sparkId: spark.id,
-            otherUserId: spark.user1Id,
+            otherUserId: spark.user1.id,
             sparkType: spark.type,
             strength: spark.strength.toString(),
           },
@@ -186,7 +232,7 @@ export class NotificationService implements OnModuleInit {
 
       await this.sendBulkNotifications(notifications);
     } catch (error) {
-      this.logger.error('Error handling spark detected event:', error);
+      this.logger.error('Error handling spark detected event', error.stack, 'NotificationService');
     }
   }
 
@@ -194,11 +240,11 @@ export class NotificationService implements OnModuleInit {
   async handleSparkMatched(spark: Spark): Promise<void> {
     try {
       // Get user information
-      const user1 = await this.userRepository.findOne({ id: spark.user1Id });
-      const user2 = await this.userRepository.findOne({ id: spark.user2Id });
+      const user1 = await this.userRepository.findOne({ id: spark.user1.id });
+      const user2 = await this.userRepository.findOne({ id: spark.user2.id });
       
       if (!user1 || !user2) {
-        this.logger.error('Users not found for spark matched event');
+        this.logger.error('Users not found for spark matched event', null, 'NotificationService');
         return;
       }
 
@@ -207,11 +253,11 @@ export class NotificationService implements OnModuleInit {
           title: '🎉 매칭 성공!',
           body: `${user2.username}님과 매칭되었어요! 메시지를 보내보세요.`,
           type: NotificationType.SPARK_MATCHED,
-          userId: spark.user1Id,
+          userId: spark.user1.id,
           priority: 'high',
           data: {
             sparkId: spark.id,
-            matchedUserId: spark.user2Id,
+            matchedUserId: spark.user2.id,
             matchedUsername: user2.username,
           },
         },
@@ -219,11 +265,11 @@ export class NotificationService implements OnModuleInit {
           title: '🎉 매칭 성공!',
           body: `${user1.username}님과 매칭되었어요! 메시지를 보내보세요.`,
           type: NotificationType.SPARK_MATCHED,
-          userId: spark.user2Id,
+          userId: spark.user2.id,
           priority: 'high',
           data: {
             sparkId: spark.id,
-            matchedUserId: spark.user1Id,
+            matchedUserId: spark.user1.id,
             matchedUsername: user1.username,
           },
         },
@@ -231,7 +277,7 @@ export class NotificationService implements OnModuleInit {
 
       await this.sendBulkNotifications(notifications);
     } catch (error) {
-      this.logger.error('Error handling spark matched event:', error);
+      this.logger.error('Error handling spark matched event', error.stack, 'NotificationService');
     }
   }
 
@@ -261,7 +307,7 @@ export class NotificationService implements OnModuleInit {
 
       await this.sendNotification(notification);
     } catch (error) {
-      this.logger.error('Error handling message received event:', error);
+      this.logger.error('Error handling message received event', error.stack, 'NotificationService');
     }
   }
 
@@ -289,7 +335,142 @@ export class NotificationService implements OnModuleInit {
 
       await this.sendNotification(notification);
     } catch (error) {
-      this.logger.error('Error handling signal spot nearby event:', error);
+      this.logger.error('Error handling signal spot nearby event', error.stack, 'NotificationService');
+    }
+  }
+
+  @OnEvent('signal-spot.liked')
+  async handleSignalSpotLiked(data: {
+    spotId: string;
+    spotCreatorId: string;
+    likerUserId: string;
+    likerUsername: string;
+    spotTitle?: string;
+  }): Promise<void> {
+    try {
+      // Don't notify if user liked their own spot
+      if (data.spotCreatorId === data.likerUserId) {
+        return;
+      }
+
+      const notification: NotificationPayload = {
+        title: '❤️ 새로운 좋아요',
+        body: `${data.likerUsername}님이 내 쪽지에 좋아요를 보냈습니다`,
+        type: NotificationType.SPOT_LIKED,
+        userId: data.spotCreatorId,
+        priority: 'normal',
+        data: {
+          spotId: data.spotId,
+          likerId: data.likerUserId,
+          likerUsername: data.likerUsername,
+        },
+      };
+
+      await this.sendNotification(notification);
+    } catch (error) {
+      this.logger.error('Error handling spot liked event', error.stack, 'NotificationService');
+    }
+  }
+
+  @OnEvent('signal-spot.commented')
+  async handleSignalSpotCommented(data: {
+    spotId: string;
+    spotCreatorId: string;
+    commenterId: string;
+    commenterUsername: string;
+    commentContent: string;
+    spotTitle?: string;
+  }): Promise<void> {
+    try {
+      // Don't notify if user commented on their own spot
+      if (data.spotCreatorId === data.commenterId) {
+        return;
+      }
+
+      const notification: NotificationPayload = {
+        title: '💬 새로운 댓글',
+        body: `${data.commenterUsername}님이 내 쪽지에 댓글을 달았습니다`,
+        type: NotificationType.SPOT_COMMENTED,
+        userId: data.spotCreatorId,
+        priority: 'high',
+        data: {
+          spotId: data.spotId,
+          commenterId: data.commenterId,
+          commenterUsername: data.commenterUsername,
+        },
+      };
+
+      await this.sendNotification(notification);
+    } catch (error) {
+      this.logger.error('Error handling spot commented event', error.stack, 'NotificationService');
+    }
+  }
+
+  @OnEvent('comment.liked')
+  async handleCommentLiked(data: {
+    commentId: string;
+    commentAuthorId: string;
+    likerUserId: string;
+    likerUsername: string;
+    commentContent: string;
+  }): Promise<void> {
+    try {
+      // Don't notify if user liked their own comment
+      if (data.commentAuthorId === data.likerUserId) {
+        return;
+      }
+
+      const notification: NotificationPayload = {
+        title: '👍 댓글 좋아요',
+        body: `${data.likerUsername}님이 회원님의 댓글을 좋아합니다`,
+        type: NotificationType.COMMENT_LIKED,
+        userId: data.commentAuthorId,
+        priority: 'normal',
+        data: {
+          commentId: data.commentId,
+          likerId: data.likerUserId,
+          likerUsername: data.likerUsername,
+        },
+      };
+
+      await this.sendNotification(notification);
+    } catch (error) {
+      this.logger.error('Error handling comment liked event', error.stack, 'NotificationService');
+    }
+  }
+
+  @OnEvent('comment.replied')
+  async handleCommentReplied(data: {
+    parentCommentId: string;
+    parentCommentAuthorId: string;
+    replierId: string;
+    replierUsername: string;
+    replyContent: string;
+  }): Promise<void> {
+    try {
+      // Don't notify if user replied to their own comment
+      if (data.parentCommentAuthorId === data.replierId) {
+        return;
+      }
+
+      const notification: NotificationPayload = {
+        title: '↩️ 댓글 답글',
+        body: `${data.replierUsername}: ${data.replyContent.length > 50 
+          ? data.replyContent.substring(0, 50) + '...' 
+          : data.replyContent}`,
+        type: NotificationType.COMMENT_REPLIED,
+        userId: data.parentCommentAuthorId,
+        priority: 'high',
+        data: {
+          parentCommentId: data.parentCommentId,
+          replierId: data.replierId,
+          replierUsername: data.replierUsername,
+        },
+      };
+
+      await this.sendNotification(notification);
+    } catch (error) {
+      this.logger.error('Error handling comment replied event', error.stack, 'NotificationService');
     }
   }
 
@@ -300,9 +481,9 @@ export class NotificationService implements OnModuleInit {
         user.fcmToken = fcmToken;
         await this.em.flush();
       }
-      this.logger.debug(`Updated FCM token for user ${userId}`);
+      this.logger.debug(`Updated FCM token for user ${userId}`, 'NotificationService');
     } catch (error) {
-      this.logger.error('Failed to update FCM token:', error);
+      this.logger.error('Failed to update FCM token', error.stack, 'NotificationService');
     }
   }
 
@@ -313,9 +494,9 @@ export class NotificationService implements OnModuleInit {
         user.fcmToken = null;
         await this.em.flush();
       }
-      this.logger.debug(`Removed FCM token for user ${userId}`);
+      this.logger.debug(`Removed FCM token for user ${userId}`, 'NotificationService');
     } catch (error) {
-      this.logger.error('Failed to remove FCM token:', error);
+      this.logger.error('Failed to remove FCM token', error.stack, 'NotificationService');
     }
   }
 
@@ -327,7 +508,12 @@ export class NotificationService implements OnModuleInit {
       case NotificationType.MESSAGE_RECEIVED:
         return 'messages';
       case NotificationType.SIGNAL_SPOT_NEARBY:
+      case NotificationType.SPOT_LIKED:
+      case NotificationType.SPOT_COMMENTED:
         return 'spots';
+      case NotificationType.COMMENT_LIKED:
+      case NotificationType.COMMENT_REPLIED:
+        return 'comments';
       case NotificationType.SYSTEM_ANNOUNCEMENT:
         return 'system';
       default:
@@ -336,22 +522,68 @@ export class NotificationService implements OnModuleInit {
   }
 
   private async getUserUnreadCount(userId: string): Promise<number> {
-    // TODO: Implement unread count logic
-    // This could count unread messages, pending sparks, etc.
-    return 0;
+    try {
+      const count = await this.em.count(Notification, {
+        user: userId,
+        status: { $in: [NotificationStatus.DELIVERED, NotificationStatus.PENDING] },
+        readAt: null
+      });
+      
+      return count;
+    } catch (error) {
+      this.logger.error('Failed to get unread count', error.stack, 'NotificationService');
+      return 0;
+    }
   }
 
   private async storeNotification(payload: NotificationPayload): Promise<void> {
-    // TODO: Store notification in database for history/analytics
-    // This could be useful for:
-    // - Notification delivery tracking
-    // - User notification preferences
-    // - Analytics on notification effectiveness
-    this.logger.debug(`Storing notification: ${payload.type} for user ${payload.userId}`);
+    try {
+      this.logger.debug(`Attempting to store notification: ${JSON.stringify(payload)}`, 'NotificationService');
+      
+      const user = await this.userRepository.findOne({ id: payload.userId });
+      if (!user) {
+        this.logger.warn(`User not found for notification storage: ${payload.userId}`, 'NotificationService');
+        return;
+      }
+      
+      this.logger.debug(`Found user for notification: ${user.id}`, 'NotificationService');
+
+      // Use the constructor with required parameters
+      const notification = new Notification({
+        user: user,
+        title: payload.title,
+        body: payload.body,
+        type: payload.type as NotificationType,
+        priority: payload.priority === 'high' 
+          ? NotificationPriority.HIGH 
+          : NotificationPriority.NORMAL,
+        data: payload.data || {},
+      });
+      
+      // Set additional properties
+      notification.status = NotificationStatus.DELIVERED;
+      notification.deliveredAt = new Date();
+      
+      this.logger.debug(`Created notification entity, attempting to persist...`, 'NotificationService');
+      
+      await this.em.persistAndFlush(notification);
+      
+      this.logger.debug(`Successfully stored notification: ${payload.type} for user ${payload.userId}`, 'NotificationService');
+    } catch (error) {
+      this.logger.error('Failed to store notification', error.stack, 'NotificationService');
+      this.logger.error(`Error details: ${error.message}`, null, 'NotificationService');
+      // Don't throw - notification storage failure shouldn't prevent notification delivery
+    }
   }
 
   async subscribeToTopic(userId: string, topic: string): Promise<boolean> {
     try {
+      // Check if Firebase Admin is available
+      if (!admin || !this.firebaseApp) {
+        this.logger.warn('Firebase Admin SDK not initialized, skipping topic subscription', 'NotificationService');
+        return false;
+      }
+
       const user = await this.userRepository.findOne({ id: userId });
 
       if (!user?.fcmToken) {
@@ -359,16 +591,22 @@ export class NotificationService implements OnModuleInit {
       }
 
       await admin.messaging().subscribeToTopic([user.fcmToken], topic);
-      this.logger.debug(`User ${userId} subscribed to topic ${topic}`);
+      this.logger.debug(`User ${userId} subscribed to topic ${topic}`, 'NotificationService');
       return true;
     } catch (error) {
-      this.logger.error('Failed to subscribe to topic:', error);
+      this.logger.error('Failed to subscribe to topic', error.stack, 'NotificationService');
       return false;
     }
   }
 
   async unsubscribeFromTopic(userId: string, topic: string): Promise<boolean> {
     try {
+      // Check if Firebase Admin is available
+      if (!admin || !this.firebaseApp) {
+        this.logger.warn('Firebase Admin SDK not initialized, skipping topic unsubscription', 'NotificationService');
+        return false;
+      }
+
       const user = await this.userRepository.findOne({ id: userId });
 
       if (!user?.fcmToken) {
@@ -376,10 +614,10 @@ export class NotificationService implements OnModuleInit {
       }
 
       await admin.messaging().unsubscribeFromTopic([user.fcmToken], topic);
-      this.logger.debug(`User ${userId} unsubscribed from topic ${topic}`);
+      this.logger.debug(`User ${userId} unsubscribed from topic ${topic}`, 'NotificationService');
       return true;
     } catch (error) {
-      this.logger.error('Failed to unsubscribe from topic:', error);
+      this.logger.error('Failed to unsubscribe from topic', error.stack, 'NotificationService');
       return false;
     }
   }
@@ -391,6 +629,12 @@ export class NotificationService implements OnModuleInit {
     data?: Record<string, string>
   ): Promise<boolean> {
     try {
+      // Check if Firebase Admin is available
+      if (!admin || !this.firebaseApp) {
+        this.logger.warn('Firebase Admin SDK not initialized, skipping topic notification', 'NotificationService');
+        return false;
+      }
+
       const message: any = {
         topic,
         notification: { title, body },
@@ -412,15 +656,142 @@ export class NotificationService implements OnModuleInit {
       };
 
       const response = await admin.messaging().send(message);
-      this.logger.log(`Topic notification sent: ${response}`);
+      this.logger.log(`Topic notification sent: ${response}`, 'NotificationService');
       return true;
     } catch (error) {
-      this.logger.error('Failed to send topic notification:', error);
+      this.logger.error('Failed to send topic notification', error.stack, 'NotificationService');
       return false;
     }
   }
 
+  async getUserNotifications(
+    userId: string,
+    options: {
+      limit?: number;
+      offset?: number;
+      unreadOnly?: boolean;
+      type?: NotificationType;
+    } = {}
+  ): Promise<{ notifications: Notification[]; totalCount: number; unreadCount: number }> {
+    try {
+      const where: any = { user: userId };
+      
+      if (options.unreadOnly) {
+        where.readAt = null;
+      }
+      
+      if (options.type) {
+        where.type = options.type;
+      }
+      
+      const [notifications, totalCount] = await this.em.findAndCount(
+        Notification,
+        where,
+        {
+          orderBy: { createdAt: 'DESC' },
+          limit: options.limit || 20,
+          offset: options.offset || 0
+        }
+      );
+      
+      const unreadCount = await this.getUserUnreadCount(userId);
+      
+      return { notifications, totalCount, unreadCount };
+    } catch (error) {
+      this.logger.error('Failed to get user notifications', error.stack, 'NotificationService');
+      return { notifications: [], totalCount: 0, unreadCount: 0 };
+    }
+  }
+
+  async markNotificationAsRead(notificationId: string, userId: string): Promise<boolean> {
+    try {
+      const notification = await this.em.findOne(Notification, {
+        id: notificationId,
+        user: userId
+      });
+      
+      if (!notification) {
+        return false;
+      }
+      
+      notification.readAt = new Date();
+      notification.status = NotificationStatus.READ;
+      await this.em.flush();
+      
+      this.logger.debug(`Marked notification ${notificationId} as read`, 'NotificationService');
+      return true;
+    } catch (error) {
+      this.logger.error('Failed to mark notification as read', error.stack, 'NotificationService');
+      return false;
+    }
+  }
+
+  async markAllNotificationsAsRead(userId: string): Promise<number> {
+    try {
+      const result = await this.em.nativeUpdate(
+        Notification,
+        {
+          user: userId,
+          readAt: null
+        },
+        {
+          readAt: new Date(),
+          status: NotificationStatus.READ
+        }
+      );
+      
+      this.logger.debug(`Marked ${result} notifications as read for user ${userId}`, 'NotificationService');
+      return result;
+    } catch (error) {
+      this.logger.error('Failed to mark all notifications as read', error.stack, 'NotificationService');
+      return 0;
+    }
+  }
+
+  async deleteNotification(notificationId: string, userId: string): Promise<boolean> {
+    try {
+      const notification = await this.em.findOne(Notification, {
+        id: notificationId,
+        user: userId
+      });
+      
+      if (!notification) {
+        return false;
+      }
+      
+      await this.em.removeAndFlush(notification);
+      
+      this.logger.debug(`Deleted notification ${notificationId}`, 'NotificationService');
+      return true;
+    } catch (error) {
+      this.logger.error('Failed to delete notification', error.stack, 'NotificationService');
+      return false;
+    }
+  }
+
+  async clearOldNotifications(daysToKeep = 30): Promise<number> {
+    try {
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - daysToKeep);
+      
+      const result = await this.em.nativeDelete(Notification, {
+        createdAt: { $lt: cutoffDate }
+      });
+      
+      this.logger.log(`Cleared ${result} old notifications`, 'NotificationService');
+      return result;
+    } catch (error) {
+      this.logger.error('Failed to clear old notifications', error.stack, 'NotificationService');
+      return 0;
+    }
+  }
+
   async onModuleInit() {
-    // This method is called when the module is initialized
+    // Initialize Firebase when the module is ready
+    this.logger.log('Initializing NotificationService...', 'NotificationService');
+    this.initializeFirebase();
   }
 }
+
+// Re-export NotificationType for backward compatibility
+export { NotificationType } from './entities/notification.entity';

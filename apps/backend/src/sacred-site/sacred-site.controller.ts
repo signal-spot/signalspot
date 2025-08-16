@@ -285,6 +285,48 @@ export class SacredSiteController {
   }
 
   /**
+   * Test endpoint for triggering discovery without authentication (dev only)
+   */
+  @Post('discovery/test-trigger')
+  async testTriggerDiscovery(): Promise<any> {
+    this.logger.log('Test discovery triggered (no auth)');
+
+    const startTime = new Date();
+    
+    // Run discovery process
+    const result = await this.sacredSiteService.discoverSacredSites();
+    
+    const endTime = new Date();
+
+    return {
+      success: true,
+      discovery: {
+        triggeredAt: startTime,
+        completedAt: endTime,
+        durationMs: endTime.getTime() - startTime.getTime(),
+        totalClusters: result.totalClusters,
+      },
+      results: {
+        newSitesCount: result.newSites.length,
+        updatedSitesCount: result.updatedSites.length,
+        dormantSitesCount: result.removedSites.length,
+        newSites: result.newSites.map(site => ({
+          id: site.id,
+          name: site.name,
+          latitude: site.latitude,
+          longitude: site.longitude,
+          radius: site.radius,
+          tier: site.tier,
+          totalScore: site.totalScore,
+        })),
+      },
+      message: result.newSites.length > 0 
+        ? `Successfully created ${result.newSites.length} new sacred sites!`
+        : 'No new sacred sites found. Try adjusting clustering parameters.',
+    };
+  }
+
+  /**
    * Update ranking for a specific site
    * PUT /sacred-sites/:id/ranking
    */

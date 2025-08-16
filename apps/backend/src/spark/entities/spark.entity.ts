@@ -15,6 +15,7 @@ export enum SparkType {
   INTEREST = 'interest', // Shared interests spark
   LOCATION = 'location', // Same location history spark
   ACTIVITY = 'activity', // Similar activity patterns spark
+  MANUAL = 'manual', // Manually sent spark from note or profile
 }
 
 export enum SparkStatus {
@@ -23,6 +24,7 @@ export enum SparkStatus {
   DECLINED = 'declined', // One or both users declined
   EXPIRED = 'expired', // Spark expired
   MATCHED = 'matched', // Converted to match
+  REJECTED = 'rejected',
 }
 
 @Entity({ tableName: 'sparks' })
@@ -75,6 +77,8 @@ export class Spark {
     timeOfDay?: string;
     [key: string]: unknown;
   };
+  @Property({ type: 'text', nullable: true })
+  message?: string; // Optional message for manual sparks
 
   @Property({ type: 'datetime', nullable: true })
   user1ResponseAt?: Date;

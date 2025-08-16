@@ -1,8 +1,9 @@
-import { Injectable, Logger, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, NotFoundException, ForbiddenException, Optional, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityManager, EntityRepository } from '@mikro-orm/core';
 import { Location, LocationAccuracy, LocationSource, LocationPrivacy, Coordinates } from '../entities/location.entity';
 import { User } from '../entities/user.entity';
+import { SparkDetectionService } from '../spark/services/spark-detection.service';
 
 export interface CreateLocationDto {
   latitude: number;
@@ -74,6 +75,8 @@ export class LocationService {
     @InjectRepository(User)
     private readonly userRepository: EntityRepository<User>,
     private readonly em: EntityManager,
+    @Optional() @Inject(forwardRef(() => SparkDetectionService))
+    private readonly sparkDetectionService?: any,
   ) {}
 
   /**
@@ -108,6 +111,18 @@ export class LocationService {
     await this.updateUserLastKnownLocation(userId, createLocationDto.latitude, createLocationDto.longitude);
 
     this.logger.log(`Location created with ID: ${location.id}`);
+
+    // Trigger Spark detection after location creation (now adds to queue)
+    if (this.sparkDetectionService) {
+      try {
+        this.logger.log(`Adding location to spark detection queue for user ${userId}`);
+        await this.sparkDetectionService.processLocationUpdate(userId, location);
+        this.logger.log(`Location added to processing queue for user ${userId}`);
+      } catch (error) {
+        this.logger.error(`Error adding location to queue: ${error.message}`, error.stack);
+      }
+    }
+
     return location;
   }
 
@@ -121,6 +136,13 @@ export class LocationService {
     if (!location) {
       throw new NotFoundException('Location not found');
     }
+
+    // Track if coordinates changed for Spark detection
+    const coordinatesChanged = (
+      updateLocationDto.latitude !== undefined && 
+      updateLocationDto.longitude !== undefined &&
+      (location.latitude !== updateLocationDto.latitude || location.longitude !== updateLocationDto.longitude)
+    );
 
     // Validate coordinates if provided
     if (updateLocationDto.latitude !== undefined && updateLocationDto.longitude !== undefined) {
@@ -152,6 +174,20 @@ export class LocationService {
     await this.em.flush();
 
     this.logger.log(`Location ${locationId} updated successfully`);
+
+    // Trigger Spark detection if coordinates changed
+    if (coordinatesChanged && this.sparkDetectionService) {
+      try {
+        this.logger.log(`Coordinates changed - triggering spark detection for user ${userId}`);
+        const sparks = await this.sparkDetectionService.processLocationUpdate(userId, location);
+        if (sparks.length > 0) {
+          this.logger.log(`Detected ${sparks.length} sparks for user ${userId}`);
+        }
+      } catch (error) {
+        this.logger.error(`Error during spark detection: ${error.message}`, error.stack);
+      }
+    }
+
     return location;
   }
 

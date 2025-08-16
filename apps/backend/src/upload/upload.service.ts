@@ -8,6 +8,7 @@ import { promises as fs } from 'fs';
 import * as path from 'path';
 import sharp from 'sharp';
 import { v4 as uuidv4 } from 'uuid';
+import { LoggerService } from '../common/services/logger.service';
 
 export interface ProcessedImage {
   originalUrl: string;
@@ -36,7 +37,10 @@ export class UploadService {
   private readonly maxFileSize: number;
   private readonly allowedImageTypes: string[];
   
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly logger: LoggerService
+  ) {
     this.uploadDir = this.configService.get('UPLOAD_DIR', 'uploads');
     this.maxFileSize = parseInt(this.configService.get('MAX_FILE_SIZE', '5242880')); // 5MB
     this.allowedImageTypes = this.configService.get('ALLOWED_IMAGE_TYPES', 'image/jpeg,image/png,image/webp').split(',');
@@ -103,7 +107,7 @@ export class UploadService {
         },
       };
     } catch (error) {
-      console.error('Error processing image:', error);
+      this.logger.error('Error processing image', error.stack, 'UploadService');
       throw new InternalServerErrorException('Failed to process image');
     }
   }
@@ -130,7 +134,7 @@ export class UploadService {
         uploadedAt: new Date(),
       };
     } catch (error) {
-      console.error('Error uploading file:', error);
+      this.logger.error('Error uploading file', error.stack, 'UploadService');
       throw new InternalServerErrorException('Failed to upload file');
     }
   }
@@ -140,7 +144,7 @@ export class UploadService {
       const filePath = path.join(this.uploadDir, filename);
       await fs.unlink(filePath);
     } catch (error) {
-      console.error('Error deleting file:', error);
+      this.logger.warn('Error deleting file', 'UploadService');
       // Don't throw error for file deletion failures
     }
   }

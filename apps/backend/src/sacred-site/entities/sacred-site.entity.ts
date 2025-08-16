@@ -114,7 +114,7 @@ export class SacredSite {
   };
 
   // Discovery and gamification
-  @Property()
+  @Property({ nullable: true })
   discovererUserId?: string;
 
   @Property()

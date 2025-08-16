@@ -1,6 +1,7 @@
 import { ConfigModule } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
+import { LoggerService } from '../services/logger.service';
 
 /**
  * Test configuration for the SignalSpot application
@@ -140,7 +141,8 @@ export const setupTestDatabase = async () => {
  */
 export const cleanupTestDatabase = async () => {
   // Cleanup logic can be added here
-  console.log('Test database cleanup completed');
+  const logger = new LoggerService();
+  logger.log('Test database cleanup completed', 'TestConfig');
 };
 
 /**

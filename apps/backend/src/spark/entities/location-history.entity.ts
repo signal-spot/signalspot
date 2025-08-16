@@ -12,7 +12,6 @@ import { User } from '../../entities/user.entity';
 @Entity({ tableName: 'location_history' })
 @Index({ properties: ['userId', 'timestamp'] })
 @Index({ properties: ['latitude', 'longitude', 'timestamp'] })
-@Index({ properties: ['timestamp'] })
 export class LocationHistory {
   @PrimaryKey()
   id: string = v4();
@@ -57,7 +56,6 @@ export class LocationHistory {
   };
 
   @Property({ type: 'datetime' })
-  @Index()
   timestamp: Date;
 
   @Property({ onCreate: () => new Date() })

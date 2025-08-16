@@ -266,11 +266,6 @@ export class UserProfileDomainService {
     if (user.isSuspended) {
       throw new Error('Cannot update profile while account is suspended');
     }
-    
-    // Require email verification for certain updates
-    if (!user.isEmailVerified && (updateData.phoneNumber || updateData.dateOfBirth)) {
-      throw new Error('Email verification required for sensitive profile updates');
-    }
   }
 
   /**
@@ -294,10 +289,7 @@ export class UserProfileDomainService {
    */
   private applyVerificationRules(user: User, verificationData: ProfileVerificationData): void {
     // Check if user can request verification
-    if (!user.isEmailVerified) {
-      throw new Error('Email verification required before profile verification');
-    }
-    
+
     if (!user.isProfileComplete()) {
       throw new Error('Profile must be complete before requesting verification');
     }

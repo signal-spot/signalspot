@@ -1,43 +1,89 @@
-# Multi-stage build for NestJS backend
+# Multi-stage build for production-optimized NestJS backend
 FROM node:18-alpine AS base
 
-# Install dependencies only when needed
+# Install dumb-init for proper signal handling
+RUN apk add --no-cache dumb-init
+
+# ========================================
+# Dependencies stage - production deps only
+# ========================================
 FROM base AS deps
 WORKDIR /app
-COPY package*.json ./
-COPY apps/backend/package.json ./apps/backend/
-COPY shared/package.json ./shared/
-RUN npm ci --only=production && npm cache clean --force
 
-# Rebuild the source code only when needed
+# Copy package files
+COPY package*.json ./
+COPY apps/backend/package*.json ./apps/backend/
+COPY shared/package*.json ./shared/
+
+# Install production dependencies with better caching
+RUN npm ci --only=production --ignore-scripts && \
+    npm cache clean --force
+
+# ========================================
+# Builder stage - compile TypeScript
+# ========================================
 FROM base AS builder
 WORKDIR /app
-COPY package*.json ./
-COPY apps/backend/package.json ./apps/backend/
-COPY shared/package.json ./shared/
-RUN npm ci
 
+# Copy package files
+COPY package*.json ./
+COPY apps/backend/package*.json ./apps/backend/
+COPY shared/package*.json ./shared/
+
+# Install all dependencies (including dev)
+RUN npm ci --ignore-scripts
+
+# Copy source code
 COPY . .
+
+# Build the application
 RUN npm run build backend
 
-# Production image, copy all the files and run nest
-FROM base AS runner
+# ========================================
+# Production stage - minimal runtime
+# ========================================
+FROM base AS production
 WORKDIR /app
 
-ENV NODE_ENV=production
+# Set production environment
+ENV NODE_ENV=production \
+    PORT=3000 \
+    NODE_OPTIONS="--max-old-space-size=1024"
 
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nestjs
+# Create non-root user with specific UID/GID
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001
 
-# Copy the bundled code from the build stage to the production image
-COPY --from=builder --chown=nestjs:nodejs /app/dist/apps/backend ./
-COPY --from=deps --chown=nestjs:nodejs /app/node_modules ./node_modules
-COPY --from=builder --chown=nestjs:nodejs /app/package.json ./package.json
+# Create necessary directories
+RUN mkdir -p logs uploads temp && \
+    chown -R nodejs:nodejs /app
 
-USER nestjs
+# Copy production dependencies
+COPY --from=deps --chown=nodejs:nodejs /app/node_modules ./node_modules
 
+# Copy built application
+COPY --from=builder --chown=nodejs:nodejs /app/dist/apps/backend ./dist
+COPY --from=builder --chown=nodejs:nodejs /app/apps/backend/mikro-orm.config.js ./
+COPY --from=builder --chown=nodejs:nodejs /app/package.json ./
+
+# Copy environment example (for reference)
+COPY --chown=nodejs:nodejs apps/backend/.env.example ./.env.example
+
+# Switch to non-root user
+USER nodejs
+
+# Health check configuration
+HEALTHCHECK --interval=30s --timeout=3s --start-period=30s --retries=3 \
+  CMD node -e "const http = require('http'); \
+    http.get('http://localhost:3000/health', (res) => { \
+      process.exit(res.statusCode === 200 ? 0 : 1); \
+    }).on('error', () => process.exit(1));"
+
+# Expose port
 EXPOSE 3000
 
-ENV PORT 3000
+# Use dumb-init to handle signals properly
+ENTRYPOINT ["dumb-init", "--"]
 
-CMD ["node", "main.js"] 
+# Run the application
+CMD ["node", "dist/main.js"] 

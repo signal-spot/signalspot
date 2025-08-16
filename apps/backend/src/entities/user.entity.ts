@@ -172,12 +172,8 @@ export class Username {
   private constructor(private readonly value: string) {}
 
   static create(username: string): Username {
-    if (!username || username.length < 3 || username.length > 30) {
-      throw new Error('Username must be between 3 and 30 characters');
-    }
-
-    if (!/^[a-zA-Z0-9_]+$/.test(username)) {
-      throw new Error('Username can only contain letters, numbers, and underscores');
+    if (!username || username.length < 2 || username.length > 30) {
+      throw new Error('Username must be between 2 and 30 characters');
     }
 
     return new Username(username);
@@ -193,6 +189,8 @@ export class Username {
 }
 
 export enum UserStatus {
+  PENDING = 'pending',
+  PENDING_PROFILE = 'pending_profile', // 신규: 프로필 설정 대기
   PENDING_VERIFICATION = 'pending_verification',
   VERIFIED = 'verified',
   SUSPENDED = 'suspended',
@@ -252,6 +250,10 @@ export abstract class AggregateRoot {
   private _domainEvents: DomainEvent[] = [];
 
   protected addDomainEvent(event: DomainEvent): void {
+    // Initialize domain events array if not exists (for DB loaded entities)
+    if (!this._domainEvents) {
+      this._domainEvents = [];
+    }
     this._domainEvents.push(event);
   }
 
@@ -439,9 +441,6 @@ export class User extends AggregateRoot {
   @Property({ type: 'number', default: 0 })
   reportedCount = 0;
 
-  @Property({ default: false })
-  isEmailVerified = false;
-
   @Property({ nullable: true })
   emailVerifiedAt?: Date;
 
@@ -453,6 +452,22 @@ export class User extends AggregateRoot {
 
   @Property({ nullable: true })
   fcmToken?: string;
+
+  @Property({ nullable: true })
+  apnsToken?: string;
+
+  @Property({ type: 'json', nullable: true })
+  notificationSettings?: {
+    pushEnabled?: boolean;
+    emailEnabled?: boolean;
+    smsEnabled?: boolean;
+    spotCreated?: boolean;
+    spotLiked?: boolean;
+    spotCommented?: boolean;
+    messageReceived?: boolean;
+    sparkReceived?: boolean;
+    systemAnnouncements?: boolean;
+  };
 
   @Property({ nullable: true })
   lockedUntil?: Date;
@@ -468,6 +483,38 @@ export class User extends AggregateRoot {
 
   @Property({ nullable: true })
   lastLogoutAt?: Date;
+
+  // Onboarding-related properties
+  @Property({ default: false })
+  profileCompleted: boolean = false;
+
+  @Property({ default: false })
+  isPhoneVerified: boolean = false;
+
+  @Property({ nullable: true })
+  displayName?: string;
+
+  @Property({ nullable: true })
+  firebaseUid?: string;
+
+  // Soft delete fields
+  @Property({ nullable: true })
+  @Index()
+  deletedAt?: Date;
+
+  @Property({ nullable: true })
+  deleteReason?: string;
+
+  @Property({ nullable: true })
+  deletedBy?: string;
+
+  @Property({ nullable: true })
+  recoveryToken?: string;
+
+  @Property({ nullable: true })
+  recoveryTokenExpires?: Date;
+
+  // Profile story fields are stored in preferences.signatureConnection
 
   @Property({ onCreate: () => new Date() })
   createdAt: Date = new Date();
@@ -488,9 +535,13 @@ export class User extends AggregateRoot {
     password: string;
     firstName?: string;
     lastName?: string;
-    isEmailVerified?: boolean;
+    isPhoneVerified?: boolean;
+    phoneNumber?: string;
     loginAttempts?: number;
     accountLocked?: boolean;
+    status?: UserStatus;
+    profileCompleted?: boolean;
+    displayName?: string;
   }): User {
     const user = new User();
     
@@ -503,9 +554,13 @@ export class User extends AggregateRoot {
     user.password = data.password;
     user.firstName = data.firstName;
     user.lastName = data.lastName;
-    user.isEmailVerified = data.isEmailVerified ?? false;
+    user.phoneNumber = data.phoneNumber;
+    user.isPhoneVerified = data.isPhoneVerified ?? false;
     user.loginAttempts = data.loginAttempts ?? 0;
     user.accountLocked = data.accountLocked ?? false;
+    user.status = data.status ?? UserStatus.PENDING_VERIFICATION;
+    user.profileCompleted = data.profileCompleted ?? false;
+    user.displayName = data.displayName;
     user.createdAt = new Date();
     
     // Emit domain event
@@ -552,6 +607,13 @@ export class User extends AggregateRoot {
     interests?: string[];
     skills?: string[];
     languages?: string[];
+    mbti?: string;
+    memorablePlace?: string;
+    childhoodMemory?: string;
+    turningPoint?: string;
+    proudestMoment?: string;
+    bucketList?: string;
+    lifeLesson?: string;
   }): void {
     const oldCompletionPercentage = this.profileCompletionPercentage;
 
@@ -615,6 +677,31 @@ export class User extends AggregateRoot {
     if (changes.languages !== undefined) {
       this.languages = changes.languages;
     }
+    
+    // Handle signature connection fields via preferences
+    if (changes.mbti !== undefined || 
+        changes.memorablePlace !== undefined ||
+        changes.childhoodMemory !== undefined ||
+        changes.turningPoint !== undefined ||
+        changes.proudestMoment !== undefined ||
+        changes.bucketList !== undefined ||
+        changes.lifeLesson !== undefined) {
+      
+      if (!this.preferences) {
+        this.preferences = {};
+      }
+      
+      this.preferences.signatureConnection = {
+        ...this.preferences.signatureConnection,
+        ...(changes.mbti !== undefined && { mbti: changes.mbti }),
+        ...(changes.memorablePlace !== undefined && { memorablePlace: changes.memorablePlace }),
+        ...(changes.childhoodMemory !== undefined && { childhoodMemory: changes.childhoodMemory }),
+        ...(changes.turningPoint !== undefined && { turningPoint: changes.turningPoint }),
+        ...(changes.proudestMoment !== undefined && { proudestMoment: changes.proudestMoment }),
+        ...(changes.bucketList !== undefined && { bucketList: changes.bucketList }),
+        ...(changes.lifeLesson !== undefined && { lifeLesson: changes.lifeLesson }),
+      };
+    }
 
     this.lastProfileUpdateAt = new Date();
     this.updatedAt = new Date();
@@ -653,6 +740,116 @@ export class User extends AggregateRoot {
 
     this.status = UserStatus.VERIFIED;
     this.updatedAt = new Date();
+  }
+
+  // Soft delete method for account deletion
+  public deactivate(reason?: string, deletedBy?: string): void {
+    if (this.deletedAt) {
+      throw new Error('User account is already deleted');
+    }
+
+    // Set deletion metadata
+    this.deletedAt = new Date();
+    this.deleteReason = reason || 'User requested account deletion';
+    this.deletedBy = deletedBy || this.id; // Self-deletion by default
+    
+    // Generate recovery token (valid for 30 days)
+    this.recoveryToken = v4();
+    const thirtyDaysFromNow = new Date();
+    thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+    this.recoveryTokenExpires = thirtyDaysFromNow;
+    
+    // Update status
+    this.status = UserStatus.DEACTIVATED;
+    this.isActive = false;
+    
+    // Anonymize personal data
+    const timestamp = Date.now();
+    this.email = `deleted_${timestamp}@signalspot.deleted`;
+    this.username = `deleted_user_${timestamp}`;
+    this.firstName = null;
+    this.lastName = null;
+    this.phoneNumber = null;
+    this.dateOfBirth = null;
+    this.bio = null;
+    this.avatarUrl = null;
+    this.gender = null;
+    this.occupation = null;
+    this.company = null;
+    this.school = null;
+    this.website = null;
+    this.location = null;
+    this.socialLinks = null;
+    this.interests = null;
+    this.skills = null;
+    this.languages = null;
+    
+    // Clear sensitive preferences
+    if (this.preferences?.signatureConnection) {
+      delete this.preferences.signatureConnection;
+    }
+    
+    // Clear tokens
+    this.fcmToken = null;
+    this.apnsToken = null;
+    this.emailVerificationToken = null;
+    this.passwordResetToken = null;
+    this.passwordResetExpires = null;
+    
+    // Clear location data
+    this.lastKnownLatitude = null;
+    this.lastKnownLongitude = null;
+    this.lastLocationUpdateAt = null;
+    this.locationPreferences = null;
+    
+    this.updatedAt = new Date();
+  }
+
+  // Recovery method
+  public recover(): void {
+    if (!this.deletedAt) {
+      throw new Error('User account is not deleted');
+    }
+
+    if (!this.recoveryToken || !this.recoveryTokenExpires) {
+      throw new Error('Recovery is not available for this account');
+    }
+
+    if (this.recoveryTokenExpires < new Date()) {
+      throw new Error('Recovery period has expired');
+    }
+
+    // Note: Personal data cannot be recovered as it was anonymized
+    // User will need to re-enter their information
+    
+    // Clear deletion metadata
+    this.deletedAt = null;
+    this.deleteReason = null;
+    this.deletedBy = null;
+    this.recoveryToken = null;
+    this.recoveryTokenExpires = null;
+    
+    // Restore account status
+    this.status = UserStatus.PENDING_PROFILE; // Need to complete profile again
+    this.isActive = true;
+    this.profileCompleted = false;
+    
+    this.updatedAt = new Date();
+  }
+
+  // Check if account can be recovered
+  public canRecover(): boolean {
+    return !!(
+      this.deletedAt && 
+      this.recoveryToken && 
+      this.recoveryTokenExpires && 
+      this.recoveryTokenExpires > new Date()
+    );
+  }
+
+  // Check if account is deleted
+  public isDeleted(): boolean {
+    return !!this.deletedAt;
   }
 
   public recordLogin(): void {
@@ -742,6 +939,14 @@ export class User extends AggregateRoot {
 
   public getNotificationRadius(): number {
     return this.locationPreferences?.nearbyNotificationRadius ?? 1; // Default 1km
+  }
+
+  // Onboarding completion check
+  public isOnboardingCompleted(): boolean {
+    return this.profileCompleted &&
+           this.isPhoneVerified &&
+           this.username !== null &&
+           !this.username.startsWith('temp_');
   }
 
   // Profile-specific business methods
@@ -950,6 +1155,9 @@ export class User extends AggregateRoot {
   get isVerified(): boolean {
     return this.status === UserStatus.VERIFIED;
   }
+
+  @Property({ default: false })
+  isAdmin: boolean = false;
 
   get isSuspended(): boolean {
     return this.status === UserStatus.SUSPENDED;

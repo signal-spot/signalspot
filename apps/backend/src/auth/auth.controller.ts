@@ -6,6 +6,8 @@ import {
   HttpStatus,
   UseGuards,
   Get,
+  Delete,
+  Req,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
@@ -56,6 +58,59 @@ export class AuthController {
     return this.authService.login(loginDto);
   }
 
+  @Post('phone/check')
+  @UseGuards(RateLimitGuard)
+  @RateLimit({ max: 10, windowMs: 60 * 1000 }) // 10 requests per minute
+  @ApiOperation({ summary: 'Check if phone number is already registered' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Phone number check result',
+    schema: {
+      type: 'object',
+      properties: {
+        exists: { type: 'boolean' },
+        message: { type: 'string' }
+      }
+    }
+  })
+  async checkPhoneNumber(@Body() checkPhoneDto: { phoneNumber: string }): Promise<{ exists: boolean; message: string }> {
+    const exists = await this.authService.checkPhoneExists(checkPhoneDto.phoneNumber);
+    return {
+      exists,
+      message: exists ? 'Phone number is already registered' : 'Phone number is available'
+    };
+  }
+
+  @Post('phone/authenticate')
+  @UseGuards(RateLimitGuard)
+  @RateLimit({ max: 5, windowMs: 60 * 1000 }) // 5 requests per minute
+  @ApiOperation({ summary: 'Authenticate with phone number (after Firebase verification)' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Phone authentication successful' 
+  })
+  @ApiResponse({ status: 400, description: 'Invalid phone number or Firebase token' })
+  @ApiResponse({ status: 401, description: 'Firebase token verification failed' })
+  @ApiResponse({ status: 429, description: 'Too many authentication attempts' })
+  async authenticateWithPhone(@Body() phoneAuthDto: {
+    phoneNumber: string;
+    firebaseToken: string;
+    userData?: {
+      username?: string;
+      firstName?: string;
+      lastName?: string;
+    };
+  }): Promise<AuthResponse & { profileCompleted: boolean }> {
+    // Firebase 토큰 검증은 AuthService에서 처리
+    return this.authService.authenticateWithPhoneAndFirebase(
+      phoneAuthDto.phoneNumber, 
+      phoneAuthDto.firebaseToken,
+      phoneAuthDto.userData
+    );
+  }
+
+  // Remove the old SMS verification method - we'll use Firebase instead
+
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   @UseGuards(RateLimitGuard)
@@ -67,14 +122,25 @@ export class AuthController {
     schema: {
       type: 'object',
       properties: {
-        accessToken: { type: 'string' }
+        success: { type: 'boolean' },
+        data: {
+          type: 'object',
+          properties: {
+            accessToken: { type: 'string' },
+            refreshToken: { type: 'string' }
+          }
+        }
       }
     }
   })
   @ApiResponse({ status: 401, description: 'Invalid refresh token' })
   @ApiResponse({ status: 429, description: 'Too many refresh attempts' })
-  async refreshToken(@Body() refreshTokenDto: RefreshTokenDto): Promise<{ accessToken: string }> {
-    return this.authService.refreshToken(refreshTokenDto.refreshToken);
+  async refreshToken(@Body() refreshTokenDto: RefreshTokenDto): Promise<{ success: boolean; data: { accessToken: string; refreshToken: string } }> {
+    const tokens = await this.authService.refreshToken(refreshTokenDto.refreshToken);
+    return {
+      success: true,
+      data: tokens
+    };
   }
 
   @Post('logout')
@@ -83,8 +149,11 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Logout user' })
   @ApiResponse({ status: 200, description: 'User successfully logged out' })
-  async logout(@GetUser() user: User): Promise<{ message: string }> {
-    await this.authService.logout(user.id);
+  async logout(
+    @GetUser() user: User,
+    @Body() body?: { platform?: 'fcm' | 'apns' }
+  ): Promise<{ message: string }> {
+    await this.authService.logout(user.id, body?.platform);
     return { message: 'Successfully logged out' };
   }
 
@@ -103,9 +172,9 @@ export class AuthController {
         username: { type: 'string' },
         firstName: { type: 'string', nullable: true },
         lastName: { type: 'string', nullable: true },
-        isEmailVerified: { type: 'boolean' },
         createdAt: { type: 'string', format: 'date-time' },
-        lastLoginAt: { type: 'string', format: 'date-time', nullable: true }
+        lastLoginAt: { type: 'string', format: 'date-time', nullable: true },
+        profileCompleted: { type: 'boolean' }
       }
     }
   })
@@ -116,9 +185,9 @@ export class AuthController {
       username: user.username,
       firstName: user.firstName,
       lastName: user.lastName,
-      isEmailVerified: user.isEmailVerified,
       createdAt: user.createdAt,
       lastLoginAt: user.lastLoginAt,
+      profileCompleted: user.profileCompleted,
     };
   }
 
@@ -165,5 +234,101 @@ export class AuthController {
       service: 'auth',
       timestamp: new Date().toISOString(),
     };
+  }
+
+  // Account deletion endpoints
+  @Delete('account')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Delete user account (soft delete)' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Account successfully deleted',
+    schema: {
+      type: 'object',
+      properties: {
+        message: { type: 'string' },
+        recoveryToken: { type: 'string' },
+        recoveryExpiresAt: { type: 'string', format: 'date-time' }
+      }
+    }
+  })
+  @ApiResponse({ status: 400, description: 'Account already deleted' })
+  @ApiResponse({ status: 401, description: 'Invalid password' })
+  async deleteAccount(
+    @GetUser() user: User,
+    @Body() body?: { password?: string }
+  ): Promise<{ 
+    message: string; 
+    recoveryToken: string;
+    recoveryExpiresAt: Date;
+  }> {
+    return this.authService.deleteAccount(user.id, body?.password);
+  }
+
+  @Post('account/recover')
+  @UseGuards(RateLimitGuard)
+  @RateLimit({ max: 5, windowMs: 60 * 1000 }) // 5 attempts per minute
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Recover deleted account' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Account successfully recovered',
+    schema: {
+      type: 'object',
+      properties: {
+        message: { type: 'string' },
+        user: {
+          type: 'object',
+          properties: {
+            id: { type: 'string' },
+            email: { type: 'string' },
+            username: { type: 'string' }
+          }
+        }
+      }
+    }
+  })
+  @ApiResponse({ status: 400, description: 'Invalid recovery token or expired' })
+  @ApiResponse({ status: 429, description: 'Too many recovery attempts' })
+  async recoverAccount(
+    @Body() body: { recoveryToken: string; email: string }
+  ): Promise<{
+    message: string;
+    user: {
+      id: string;
+      email: string;
+      username: string;
+    };
+  }> {
+    return this.authService.recoverAccount(body.recoveryToken, body.email);
+  }
+
+  @Post('account/recovery-status')
+  @UseGuards(RateLimitGuard)
+  @RateLimit({ max: 10, windowMs: 60 * 1000 }) // 10 requests per minute
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Check recovery token status' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Recovery status retrieved',
+    schema: {
+      type: 'object',
+      properties: {
+        canRecover: { type: 'boolean' },
+        expiresAt: { type: 'string', format: 'date-time', nullable: true },
+        message: { type: 'string' }
+      }
+    }
+  })
+  async checkRecoveryStatus(
+    @Body() body: { recoveryToken: string }
+  ): Promise<{
+    canRecover: boolean;
+    expiresAt?: Date;
+    message: string;
+  }> {
+    return this.authService.checkRecoveryStatus(body.recoveryToken);
   }
 } 

@@ -13,41 +13,44 @@ import { Type, Transform } from 'class-transformer';
 import { ApiPropertyOptional, ApiProperty } from '@nestjs/swagger';
 import { SpotVisibility, SpotType } from '../../entities/signal-spot.entity';
 
-export class LocationQueryDto {
-  @ApiProperty({
+// Base class for location-based queries to avoid duplication
+export class BaseLocationQueryDto {
+  @ApiPropertyOptional({
     description: 'Latitude coordinate for location-based search',
     example: 37.7749,
     minimum: -90,
     maximum: 90
   })
+  @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @IsLatitude()
-  latitude: number;
+  latitude?: number;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'Longitude coordinate for location-based search',
     example: -122.4194,
     minimum: -180,
     maximum: 180
   })
+  @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @IsLongitude()
-  longitude: number;
+  longitude?: number;
 
   @ApiPropertyOptional({
     description: 'Search radius in kilometers',
-    example: 1.5,
+    example: 10,
     minimum: 0.1,
-    maximum: 50,
-    default: 1
+    maximum: 100,
+    default: 10
   })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(0.1, { message: 'Radius must be at least 0.1 km' })
-  @Max(50, { message: 'Radius cannot exceed 50 km' })
+  @Max(100, { message: 'Radius cannot exceed 100 km' })
   radiusKm?: number;
 
   @ApiPropertyOptional({
@@ -55,7 +58,7 @@ export class LocationQueryDto {
     example: 20,
     minimum: 1,
     maximum: 100,
-    default: 20
+    default: 50
   })
   @IsOptional()
   @Type(() => Number)
@@ -63,6 +66,31 @@ export class LocationQueryDto {
   @Min(1, { message: 'Limit must be at least 1' })
   @Max(100, { message: 'Limit cannot exceed 100' })
   limit?: number;
+}
+
+export class LocationQueryDto extends BaseLocationQueryDto {
+  // Override latitude and longitude to make them required
+  @ApiProperty({
+    description: 'Latitude coordinate for location-based search (required)',
+    example: 37.7749,
+    minimum: -90,
+    maximum: 90
+  })
+  @Type(() => Number)
+  @IsNumber()
+  @IsLatitude()
+  declare latitude: number;
+
+  @ApiProperty({
+    description: 'Longitude coordinate for location-based search (required)',
+    example: -122.4194,
+    minimum: -180,
+    maximum: 180
+  })
+  @Type(() => Number)
+  @IsNumber()
+  @IsLongitude()
+  declare longitude: number;
 
   @ApiPropertyOptional({
     description: 'Number of results to skip (for pagination)',
@@ -84,8 +112,8 @@ export class LocationQueryDto {
   })
   @IsOptional()
   @IsString()
-  @Transform(({ value }) => value ? value.split(',').map((type: string) => type.trim()) : undefined)
-  types?: string;
+  @Transform(({ value }) => value ? value.split(',').map((type: string) => type.trim() as SpotType) : undefined)
+  types?: SpotType[];
 
   @ApiPropertyOptional({
     description: 'Filter by tags (comma-separated)',
@@ -95,7 +123,7 @@ export class LocationQueryDto {
   @IsOptional()
   @IsString()
   @Transform(({ value }) => value ? value.split(',').map((tag: string) => tag.trim()) : undefined)
-  tags?: string;
+  tags?: string[];
 
   @ApiPropertyOptional({
     description: 'Search term to filter spots by content',
@@ -122,7 +150,7 @@ export class UserSpotsQueryDto {
     example: 20,
     minimum: 1,
     maximum: 100,
-    default: 20
+    default: 50
   })
   @IsOptional()
   @Type(() => Number)
@@ -191,14 +219,14 @@ export class SearchSpotsQueryDto {
     description: 'Search radius in kilometers',
     example: 5,
     minimum: 0.1,
-    maximum: 50,
+    maximum: 100,
     default: 10
   })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(0.1, { message: 'Radius must be at least 0.1 km' })
-  @Max(50, { message: 'Radius cannot exceed 50 km' })
+  @Max(100, { message: 'Radius cannot exceed 100 km' })
   radiusKm?: number;
 
   @ApiPropertyOptional({
@@ -206,7 +234,7 @@ export class SearchSpotsQueryDto {
     example: 20,
     minimum: 1,
     maximum: 100,
-    default: 20
+    default: 50
   })
   @IsOptional()
   @Type(() => Number)
@@ -265,14 +293,14 @@ export class TagsQueryDto {
     description: 'Search radius in kilometers',
     example: 5,
     minimum: 0.1,
-    maximum: 50,
+    maximum: 100,
     default: 10
   })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(0.1, { message: 'Radius must be at least 0.1 km' })
-  @Max(50, { message: 'Radius cannot exceed 50 km' })
+  @Max(100, { message: 'Radius cannot exceed 100 km' })
   radiusKm?: number;
 
   @ApiPropertyOptional({
@@ -280,7 +308,7 @@ export class TagsQueryDto {
     example: 20,
     minimum: 1,
     maximum: 100,
-    default: 20
+    default: 50
   })
   @IsOptional()
   @Type(() => Number)
@@ -312,59 +340,7 @@ export class TagsQueryDto {
   matchAll?: boolean;
 }
 
-export class TrendingQueryDto {
-  @ApiPropertyOptional({
-    description: 'Latitude coordinate for location-based search',
-    example: 37.7749,
-    minimum: -90,
-    maximum: 90
-  })
-  @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  @IsLatitude()
-  latitude?: number;
-
-  @ApiPropertyOptional({
-    description: 'Longitude coordinate for location-based search',
-    example: -122.4194,
-    minimum: -180,
-    maximum: 180
-  })
-  @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  @IsLongitude()
-  longitude?: number;
-
-  @ApiPropertyOptional({
-    description: 'Search radius in kilometers',
-    example: 5,
-    minimum: 0.1,
-    maximum: 50,
-    default: 10
-  })
-  @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  @Min(0.1, { message: 'Radius must be at least 0.1 km' })
-  @Max(50, { message: 'Radius cannot exceed 50 km' })
-  radiusKm?: number;
-
-  @ApiPropertyOptional({
-    description: 'Maximum number of results to return',
-    example: 20,
-    minimum: 1,
-    maximum: 100,
-    default: 20
-  })
-  @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  @Min(1, { message: 'Limit must be at least 1' })
-  @Max(100, { message: 'Limit cannot exceed 100' })
-  limit?: number;
-
+export class TrendingQueryDto extends BaseLocationQueryDto {
   @ApiPropertyOptional({
     description: 'Time frame for trending calculation',
     example: 'day',
@@ -402,13 +378,13 @@ export class LocationStatsQueryDto {
     description: 'Radius in kilometers for statistics calculation',
     example: 1,
     minimum: 0.1,
-    maximum: 50,
+    maximum: 100,
     default: 1
   })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(0.1, { message: 'Radius must be at least 0.1 km' })
-  @Max(50, { message: 'Radius cannot exceed 50 km' })
+  @Max(100, { message: 'Radius cannot exceed 100 km' })
   radiusKm?: number;
 }

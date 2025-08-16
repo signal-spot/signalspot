@@ -7,6 +7,8 @@ import {
   IsArray, 
   ArrayMaxSize,
   IsObject,
+  IsUrl,
+  IsBoolean,
   Min, 
   Max, 
   Length,
@@ -18,15 +20,15 @@ import { SpotVisibility, SpotType } from '../../entities/signal-spot.entity';
 
 export class CreateSpotDto {
   @ApiProperty({
-    description: 'The main message content of the signal spot',
+    description: 'The main content of the signal spot',
     example: 'Great coffee shop with free WiFi!',
     minLength: 1,
     maxLength: 500
   })
   @IsString()
   @IsNotEmpty()
-  @Length(1, 500, { message: 'Message must be between 1 and 500 characters' })
-  message: string;
+  @Length(1, 500, { message: 'Content must be between 1 and 500 characters' })
+  content: string;
 
   @ApiPropertyOptional({
     description: 'Optional title for the signal spot',
@@ -59,6 +61,19 @@ export class CreateSpotDto {
   longitude: number;
 
   @ApiPropertyOptional({
+    description: 'Array of media URLs (images, videos) for the signal spot',
+    example: ['https://example.com/image1.jpg', 'https://example.com/image2.jpg'],
+    maxItems: 5,
+    type: [String]
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(5, { message: 'Cannot have more than 5 media URLs' })
+  @IsString({ each: true })
+  @IsUrl({}, { each: true, message: 'Each media URL must be a valid URL' })
+  mediaUrls?: string[];
+
+  @ApiPropertyOptional({
     description: 'Radius in meters for the signal spot coverage',
     example: 100,
     minimum: 1,
@@ -82,7 +97,7 @@ export class CreateSpotDto {
   @IsNumber()
   @Min(1, { message: 'Duration must be at least 1 hour' })
   @Max(168, { message: 'Duration cannot exceed 168 hours (1 week)' })
-  durationInHours?: number;
+  durationHours?: number;
 
   @ApiPropertyOptional({
     description: 'Visibility level of the signal spot',
@@ -116,8 +131,17 @@ export class CreateSpotDto {
   @IsArray()
   @ArrayMaxSize(10, { message: 'Cannot have more than 10 tags' })
   @IsString({ each: true })
-  @Length(1, 30, { each: true, message: 'Each tag must be between 1 and 30 characters' })
+  @Length(1, 15, { each: true, message: 'Each tag must be between 1 and 15 characters' })
   tags?: string[];
+
+  @ApiPropertyOptional({
+    description: 'Whether the spot should be posted anonymously',
+    example: true,
+    default: false
+  })
+  @IsOptional()
+  @IsBoolean()
+  isAnonymous?: boolean;
 
   @ApiPropertyOptional({
     description: 'Additional metadata for the signal spot',

@@ -1,5 +1,7 @@
 import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { BullModule } from '@nestjs/bull';
+import firebaseConfig from '../config/firebase.config';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ScheduleModule } from '@nestjs/schedule';
@@ -13,8 +15,13 @@ import { ProfileModule } from '../profile/profile.module';
 import { UploadModule } from '../upload/upload.module';
 import { SparkModule } from '../spark/spark.module';
 import { FeedModule } from '../feed/feed.module';
-import { NotificationModule } from '../notifications/notification.module';
+import { NotificationModule as PushNotificationModule } from '../notification/notification.module';
+import { NotificationModule as NotificationsModule } from '../notifications/notification.module';
 import { SacredSiteModule } from '../sacred-site/sacred-site.module';
+import { ChatModule } from '../chat/chat.module';
+import { WebSocketModule } from '../websocket/websocket.module';
+import { UserModule } from '../user/user.module';
+import { ReportModule } from '../report/report.module';
 import { CacheModule } from '../common/cache/cache.module';
 import { CommonModule } from '../common/common.module';
 import { databaseConfig } from '../database/database.config';
@@ -27,11 +34,19 @@ import { CacheInterceptor } from '../common/interceptors/cache.interceptor';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: ['.env.local', '.env'],
+      envFilePath: ['.env.development', '.env.local', '.env'],
+      load: [firebaseConfig],
     }),
     MikroOrmModule.forRoot(databaseConfig),
     EventEmitterModule.forRoot(),
     ScheduleModule.forRoot(),
+    BullModule.forRoot({
+      redis: {
+        host: process.env.REDIS_HOST || 'localhost',
+        port: parseInt(process.env.REDIS_PORT) || 6379,
+        password: process.env.REDIS_PASSWORD,
+      },
+    }),
     CacheModule,
     CommonModule,
     AuthModule,
@@ -41,8 +56,13 @@ import { CacheInterceptor } from '../common/interceptors/cache.interceptor';
     SignalSpotModule,
     SparkModule,
     FeedModule,
-    NotificationModule,
+    PushNotificationModule,
+    NotificationsModule,
     SacredSiteModule,
+    ChatModule,
+    WebSocketModule,
+    UserModule,
+    ReportModule,
   ],
   controllers: [AppController],
   providers: [

@@ -17,12 +17,13 @@ export class SignalSpotDomainService {
   // Business Logic: Create SignalSpot with validation
   async createSignalSpot(data: {
     creator: User;
-    message: string;
+    content: string;
     title?: string;
     latitude: number;
     longitude: number;
+    mediaUrls?: string[];
     radiusInMeters?: number;
-    durationInHours?: number;
+    durationHours?: number;
     visibility?: SpotVisibility;
     type?: SpotType;
     tags?: string[];
@@ -37,13 +38,17 @@ export class SignalSpotDomainService {
     await this.validateDailySpotLimit(data.creator);
 
     // Business Rule: Check for spam (same location + content)
-    await this.validateSpamPrevention(data.creator, data.message, data.latitude, data.longitude);
+    await this.validateSpamPrevention(data.creator, data.content, data.latitude, data.longitude);
 
     // Business Rule: Validate location permissions
     await this.validateLocationPermissions(data.creator, data.latitude, data.longitude);
 
-    // Create and save the spot
-    const spot = SignalSpot.create(data);
+    // Create and save the spot - map content to message and durationHours to durationInHours for entity
+    const spot = SignalSpot.create({
+      ...data,
+      message: data.content, // Map content to message for internal entity storage
+      durationInHours: data.durationHours, // Map durationHours to durationInHours for entity
+    });
     return await this.signalSpotRepository.save(spot);
   }
 
@@ -73,11 +78,9 @@ export class SignalSpotDomainService {
       options
     );
 
-    // Filter spots based on user's location and spot radius
-    return spots.filter(spot => {
-      // Check if user is within the spot's radius
-      return spot.isWithinRadius(coordinates);
-    });
+    // Return all spots found within the search radius
+    // The PostGIS query already filters by distance, so we don't need additional filtering
+    return spots;
   }
 
   // Business Logic: Process spot interaction with business rules
@@ -116,6 +119,10 @@ export class SignalSpotDomainService {
         spot.addShare(user);
         break;
       case 'report':
+        // Prevent self-reporting
+        if (spot.creator.id === user.id) {
+          throw new Error('Cannot report your own content');
+        }
         if (!additionalData?.reason) {
           throw new Error('Report reason is required');
         }

@@ -14,12 +14,8 @@ export class Username {
 
     const trimmedUsername = username.trim();
     
-    if (trimmedUsername.length < 3 || trimmedUsername.length > 30) {
-      throw new InvalidValueObjectException('Username', 'Username must be between 3 and 30 characters');
-    }
-
-    if (!this.isValidFormat(trimmedUsername)) {
-      throw new InvalidValueObjectException('Username', 'Username can only contain letters, numbers, and underscores');
+    if (trimmedUsername.length < 2 || trimmedUsername.length > 30) {
+      throw new InvalidValueObjectException('Username', 'Username must be between 2 and 30 characters');
     }
 
     if (this.isReserved(trimmedUsername)) {

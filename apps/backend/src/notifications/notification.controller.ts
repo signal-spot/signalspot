@@ -13,7 +13,8 @@ import {
   BadRequestException,
   NotFoundException,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery, ApiProperty } from '@nestjs/swagger';
+import { IsString, IsNotEmpty } from 'class-validator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { NotificationService } from './notification.service';
 import { NotificationSchedulerService, ScheduledNotificationData, BulkNotificationData, NotificationCampaign } from './services/notification-scheduler.service';
@@ -23,7 +24,13 @@ import { EntityRepository, EntityManager } from '@mikro-orm/core';
 import { Notification, NotificationStatus, NotificationType, NotificationPriority } from './entities/notification.entity';
 
 class UpdateFCMTokenDto {
-  fcmToken: string;
+  @ApiProperty({ 
+    example: 'fcm_token_string',
+    description: 'FCM token for push notifications'
+  })
+  @IsString()
+  @IsNotEmpty()
+  token: string;
 }
 
 class SendNotificationDto {
@@ -85,7 +92,7 @@ export class NotificationController {
   @ApiResponse({ status: 200, description: 'FCM token updated successfully' })
   async updateFCMToken(@Request() req: any, @Body() body: UpdateFCMTokenDto) {
     const userId = req.user.id;
-    await this.notificationService.updateUserFCMToken(userId, body.fcmToken);
+    await this.notificationService.updateUserFCMToken(userId, body.token);
     return { success: true, message: 'FCM token updated successfully' };
   }
 
@@ -114,7 +121,7 @@ export class NotificationController {
   ) {
     const userId = req.user.id;
     
-    const where: any = { userId };
+    const where: any = { user: userId };
     if (status) where.status = status;
     if (type) where.type = type;
 
@@ -133,7 +140,7 @@ export class NotificationController {
     });
 
     return {
-      notifications,
+      data: notifications,  // ResponseTransformInterceptor expects 'data' field
       pagination: {
         total,
         limit,

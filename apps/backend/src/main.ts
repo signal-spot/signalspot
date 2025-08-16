@@ -11,6 +11,9 @@ import helmet from 'helmet';
 import { AppModule } from './app/app.module';
 
 async function bootstrap() {
+  // 한국 시간대 설정
+  process.env.TZ = 'Asia/Seoul';
+  
   const app = await NestFactory.create(AppModule);
   
   // Get configuration service
@@ -86,8 +89,10 @@ async function bootstrap() {
   app.use('/health', async (req, res) => {
     try {
       // 데이터베이스 연결 확인
-      const em = app.get('MikroORM').em.fork();
-      await em.execute('SELECT 1');
+      const { MikroORM } = await import('@mikro-orm/core');
+      const orm = app.get(MikroORM);
+      const em = orm.em.fork();
+      await em.getConnection().execute('SELECT 1');
       
       res.status(200).json({
         status: 'healthy',
@@ -95,6 +100,7 @@ async function bootstrap() {
         uptime: process.uptime(),
         version: '2.0.0',
         environment: configService.get('NODE_ENV'),
+        timezone: process.env.TZ,
         services: {
           database: 'healthy',
           api: 'healthy'
@@ -107,6 +113,7 @@ async function bootstrap() {
         uptime: process.uptime(),
         version: '2.0.0',
         environment: configService.get('NODE_ENV'),
+        timezone: process.env.TZ,
         services: {
           database: 'unhealthy',
           api: 'healthy'
@@ -122,6 +129,10 @@ async function bootstrap() {
   
   Logger.log(
     `🚀 SignalSpot API is running on: http://localhost:${port}/${globalPrefix}`,
+  );
+  
+  Logger.log(
+    `🕐 Server timezone: ${process.env.TZ || 'UTC'} (Current time: ${new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })})`,
   );
   
   if (configService.get('NODE_ENV') !== 'production') {

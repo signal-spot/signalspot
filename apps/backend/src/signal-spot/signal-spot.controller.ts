@@ -16,6 +16,7 @@ import {
   BadRequestException,
   NotFoundException,
   ForbiddenException,
+  ConflictException,
   InternalServerErrorException,
   UseInterceptors,
   Logger
@@ -56,6 +57,7 @@ import {
   AdminStatsResponseDto,
   SpotInteractionResponseDto
 } from './dto';
+import { AdminCreateSpotDto } from './dto/admin-create-spot.dto';
 
 
 @ApiTags('Signal Spots')
@@ -79,7 +81,9 @@ import {
 export class SignalSpotController {
   private readonly logger = new Logger(SignalSpotController.name);
 
-  constructor(private readonly signalSpotService: SignalSpotService) {}
+  constructor(
+    private readonly signalSpotService: SignalSpotService
+  ) {}
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
@@ -129,12 +133,60 @@ export class SignalSpotController {
     }
   }
 
+  @Post('admin/system-message')
+  @UseGuards(AdminGuard)
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ 
+    summary: 'Create a system message (Admin only)',
+    description: 'Allows administrators to create system messages with custom sender names.'
+  })
+  @ApiBody({ type: AdminCreateSpotDto })
+  @ApiResponse({ 
+    status: 201, 
+    description: 'System message created successfully',
+    type: SpotSingleResponseDto
+  })
+  @ApiResponse({ status: 403, description: 'Forbidden - Admin access required' })
+  @ApiResponse({ status: 400, description: 'Invalid input data' })
+  async createAdminSpot(
+    @Body() dto: AdminCreateSpotDto,
+    @GetUser() adminUser: User
+  ): Promise<SpotSingleResponseDto> {
+    try {
+      this.logger.log(`Admin ${adminUser.id} creating system message`);
+      
+      const spot = await this.signalSpotService.createAdminSpot(adminUser, dto);
+      
+      this.logger.log(`System message created successfully: ${spot.id}`);
+      
+      // Return the spot with custom sender name in the summary
+      const summary = spot.getSummary();
+      if (spot.isSystemMessage && spot.customSenderName) {
+        summary.creatorUsername = spot.customSenderName;
+        summary.isSystemMessage = true;
+      }
+      
+      return {
+        success: true,
+        data: summary,
+        message: 'System message created successfully'
+      };
+    } catch (error) {
+      this.logger.error(`Failed to create system message: ${error.message}`, error.stack);
+      
+      if (error instanceof ForbiddenException) {
+        throw error;
+      }
+      
+      throw new BadRequestException(error.message);
+    }
+  }
+
   @Get('nearby')
   @ApiOperation({ 
     summary: 'Get nearby Signal Spots',
     description: 'Retrieves Signal Spots near the specified location with optional filtering by type, tags, and search terms.'
   })
-  @ApiQuery({ type: LocationQueryDto })
   @ApiResponse({ 
     status: 200, 
     description: 'Nearby Signal Spots retrieved successfully',
@@ -144,7 +196,7 @@ export class SignalSpotController {
   @ApiResponse({ status: 401, description: 'Unauthorized - Invalid or missing authentication token' })
   @ApiResponse({ status: 500, description: 'Internal server error' })
   async getNearbySpots(
-    @Query() query: LocationQueryDto,
+    @Query(new ValidationPipe({ transform: true, transformOptions: { enableImplicitConversion: true } })) query: LocationQueryDto,
     @GetUser() user: User
   ): Promise<SpotListResponseDto> {
     try {
@@ -152,25 +204,26 @@ export class SignalSpotController {
         throw new BadRequestException('Latitude and longitude are required for nearby search');
       }
 
-      this.logger.log(`Getting nearby spots for user ${user.id} at [${query.latitude}, ${query.longitude}] within ${query.radiusKm || 1}km`);
+      // Enhanced debug logging
+      const effectiveRadius = query.radiusKm || 10;
+      const effectiveLimit = query.limit || 50;
+      
+      this.logger.log(`[NEARBY-DEBUG] Controller received query:`);
+      this.logger.log(`  - Location: [${query.latitude}, ${query.longitude}]`);
+      this.logger.log(`  - Radius: ${query.radiusKm} -> effective: ${effectiveRadius}km`);
+      this.logger.log(`  - Limit: ${query.limit} -> effective: ${effectiveLimit}`);
+      this.logger.log(`  - User: ${user.id}`);
 
-      const spots = await this.signalSpotService.getSpotsNearLocation(user, {
-        latitude: query.latitude,
-        longitude: query.longitude,
-        radiusKm: query.radiusKm,
-        limit: query.limit,
-        offset: query.offset,
-        types: query.types ? (query.types as string).split(',') as any[] : undefined,
-        tags: query.tags ? (query.tags as string).split(',') : undefined,
-        search: query.search,
-        visibility: query.visibility
-      });
+      const spots = await this.signalSpotService.getSpotsNearLocation(user, query);
 
-      this.logger.log(`Found ${spots.length} nearby spots`);
+      this.logger.log(`[NEARBY-DEBUG] Controller returning ${spots.length} spots`);
 
       return {
         success: true,
-        data: spots.map(spot => spot.getSummary()),
+        data: spots.map(spot => ({
+          ...spot.getSummary(),
+          isLiked: spot.hasUserLiked(user.id)
+        })),
         count: spots.length,
         message: 'Nearby Signal Spots retrieved successfully'
       };
@@ -528,7 +581,7 @@ export class SignalSpotController {
         throw new BadRequestException('Latitude and longitude are required for location statistics');
       }
 
-      this.logger.log(`Getting location statistics for [${query.latitude}, ${query.longitude}] within ${query.radiusKm || 1}km`);
+      this.logger.log(`Getting location statistics for [${query.latitude}, ${query.longitude}] within ${query.radiusKm || 10}km`);
 
       const stats = await this.signalSpotService.getLocationStatistics(
         query.latitude,
@@ -591,7 +644,10 @@ export class SignalSpotController {
 
       return {
         success: true,
-        data: spot.getSummary(),
+        data: {
+          ...spot.getSummary(),
+          isLiked: spot.hasUserLiked(user.id)
+        },
         message: 'Signal Spot retrieved successfully'
       };
     } catch (error) {
@@ -812,6 +868,7 @@ export class SignalSpotController {
     try {
       this.logger.log(`User ${user.id} interacting with spot ${id}: ${interactionDto.type}`);
       
+      // Handle all interaction types including report
       const spot = await this.signalSpotService.interactWithSpot(id, interactionDto, user);
       
       this.logger.log(`Interaction ${interactionDto.type} recorded successfully for spot ${id}`);
@@ -830,6 +887,273 @@ export class SignalSpotController {
       if (error.message.includes('Access denied') || error.message.includes('cannot interact')) {
         throw new ForbiddenException(error.message);
       }
+      if (error.message.includes('already reported')) {
+        throw new ConflictException(error.message);
+      }
+      throw new BadRequestException(error.message);
+    }
+  }
+
+  @Post(':id/like')
+  @ApiOperation({ 
+    summary: 'Toggle Signal Spot like',
+    description: 'Likes or unlikes a Signal Spot. Returns the new like status.'
+  })
+  @ApiParam({ 
+    name: 'id', 
+    description: 'Unique identifier of the Signal Spot', 
+    format: 'uuid'
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Like status toggled successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean', example: true },
+        data: {
+          type: 'object',
+          properties: {
+            spotId: { type: 'string' },
+            isLiked: { type: 'boolean' },
+            likeCount: { type: 'number' }
+          }
+        },
+        message: { type: 'string' }
+      }
+    }
+  })
+  async toggleSpotLike(
+    @Param('id', ParseUUIDPipe) id: string,
+    @GetUser() user: User
+  ) {
+    try {
+      this.logger.log(`User ${user.id} toggling like for spot ${id}`);
+      
+      const result = await this.signalSpotService.toggleSpotLike(id, user);
+      
+      return {
+        success: true,
+        data: {
+          spotId: id,
+          isLiked: result.isLiked,
+          likeCount: result.likeCount
+        },
+        message: result.isLiked ? 'Signal Spot liked' : 'Signal Spot unliked'
+      };
+    } catch (error) {
+      this.logger.error(`Failed to toggle spot like: ${error.message}`, error.stack);
+      
+      if (error.message.includes('not found')) {
+        throw new NotFoundException(error.message);
+      }
+      if (error.message.includes('cannot interact')) {
+        throw new ForbiddenException(error.message);
+      }
+      throw new BadRequestException(error.message);
+    }
+  }
+
+  @Post(':id/comments')
+  @RateLimit({
+    windowMs: 60 * 1000, // 1 minute
+    max: 10, // limit to 10 comments per minute
+    message: 'Too many comments, please slow down.',
+  })
+  @ApiOperation({ 
+    summary: 'Add comment to Signal Spot',
+    description: 'Adds a comment to a Signal Spot.'
+  })
+  @ApiParam({ 
+    name: 'id', 
+    description: 'Unique identifier of the Signal Spot', 
+    format: 'uuid'
+  })
+  @ApiBody({ 
+    schema: {
+      type: 'object',
+      properties: {
+        content: { type: 'string', minLength: 1, maxLength: 500 }
+      },
+      required: ['content']
+    }
+  })
+  @ApiResponse({ 
+    status: 201, 
+    description: 'Comment added successfully'
+  })
+  async addComment(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { content: string },
+    @GetUser() user: User
+  ) {
+    try {
+      this.logger.log(`User ${user.id} adding comment to spot ${id}`);
+      
+      // Call the service to add the comment
+      const comment = await this.signalSpotService.addComment(id, body.content, user);
+      
+      return {
+        success: true,
+        data: {
+          id: comment.id,
+          spotId: comment.spot.id,
+          author: comment.isAnonymous ? '익명' : (user.username || 'Anonymous'),
+          authorId: user.id,
+          content: comment.content,
+          createdAt: comment.createdAt,
+          likes: comment.likeCount,
+          isLiked: comment.isLikedBy(user.id)
+        },
+        message: 'Comment added successfully'
+      };
+    } catch (error) {
+      this.logger.error(`Failed to add comment: ${error.message}`, error.stack);
+      
+      if (error.message.includes('not found')) {
+        throw new NotFoundException(error.message);
+      }
+      throw new BadRequestException(error.message);
+    }
+  }
+
+  @Get(':id/comments')
+  @ApiOperation({ 
+    summary: 'Get comments for Signal Spot',
+    description: 'Retrieves all comments for a Signal Spot.'
+  })
+  @ApiParam({ 
+    name: 'id', 
+    description: 'Unique identifier of the Signal Spot', 
+    format: 'uuid'
+  })
+  @ApiQuery({ name: 'limit', required: false, type: Number, example: 50, description: 'Number of comments to retrieve (default: 50)' })
+  @ApiQuery({ name: 'offset', required: false, type: Number, example: 0, description: 'Number of comments to skip (default: 0)' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Comments retrieved successfully'
+  })
+  async getComments(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('limit') limit: number = 50,
+    @Query('offset') offset: number = 0,
+    @GetUser() user: User
+  ) {
+    try {
+      this.logger.log(`Getting comments for spot ${id}, user: ${user.id}`);
+      
+      // Check if spot exists and user can access it
+      const spot = await this.signalSpotService.getSpotById(id, user);
+      
+      if (!spot) {
+        throw new NotFoundException(`Signal Spot with ID ${id} not found`);
+      }
+      
+      // Get actual comments from the service
+      const comments = await this.signalSpotService.getComments(id, limit, offset, user);
+      
+      const commentData = comments.map(comment => {
+        const isLiked = comment.isLikedBy(user.id);
+        this.logger.debug(`Comment ${comment.id}: likedBy=${JSON.stringify(comment.likedBy)}, isLiked=${isLiked}, count=${comment.likeCount}`);
+        
+        return {
+          id: comment.id,
+          spotId: comment.spot.id,
+          author: comment.isAnonymous ? '익명' : (comment.author.username || 'Anonymous'),
+          authorId: comment.author.id,
+          authorAvatar: comment.isAnonymous ? null : comment.author.avatarUrl,
+          content: comment.content,
+          createdAt: comment.createdAt,
+          likes: comment.likeCount,
+          isLiked: isLiked,
+          likedBy: comment.likedBy // Include for debugging (remove in production)
+        };
+      });
+      
+      return {
+        success: true,
+        data: commentData,
+        count: comments.length,
+        message: 'Comments retrieved successfully'
+      };
+    } catch (error) {
+      this.logger.error(`Failed to get comments: ${error.message}`, error.stack);
+      
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new BadRequestException(error.message);
+    }
+  }
+
+  @Delete(':id/comments/:commentId')
+  @ApiOperation({ 
+    summary: 'Delete comment',
+    description: 'Deletes a comment from a Signal Spot. Only the comment author can delete it.'
+  })
+  @ApiParam({ name: 'id', description: 'Signal Spot ID', format: 'uuid' })
+  @ApiParam({ name: 'commentId', description: 'Comment ID' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Comment deleted successfully'
+  })
+  async deleteComment(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('commentId') commentId: string,
+    @GetUser() user: User
+  ) {
+    try {
+      this.logger.log(`User ${user.id} deleting comment ${commentId} from spot ${id}`);
+      
+      await this.signalSpotService.deleteComment(id, commentId, user);
+      
+      return {
+        success: true,
+        message: 'Comment deleted successfully'
+      };
+    } catch (error) {
+      this.logger.error(`Failed to delete comment: ${error.message}`, error.stack);
+      throw new BadRequestException(error.message);
+    }
+  }
+
+  @Post(':id/comments/:commentId/like')
+  @ApiOperation({ 
+    summary: 'Like/unlike comment',
+    description: 'Toggles like status for a comment.'
+  })
+  @ApiParam({ name: 'id', description: 'Signal Spot ID', format: 'uuid' })
+  @ApiParam({ name: 'commentId', description: 'Comment ID' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Like status toggled successfully'
+  })
+  async toggleCommentLike(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('commentId') commentId: string,
+    @GetUser() user: User
+  ) {
+    try {
+      this.logger.log(`User ${user.id} toggling like for comment ${commentId} in spot ${id}`);
+      
+      const comment = await this.signalSpotService.toggleCommentLike(id, commentId, user);
+      
+      const isLiked = comment.isLikedBy(user.id);
+      
+      this.logger.log(`Like toggle result - Comment: ${commentId}, User: ${user.id}, IsLiked: ${isLiked}, Count: ${comment.likeCount}`);
+      
+      return {
+        success: true,
+        data: {
+          commentId: comment.id,
+          isLiked: isLiked,
+          likeCount: comment.likeCount,
+          likedBy: comment.likedBy // Include for debugging (remove in production)
+        },
+        message: isLiked ? 'Comment liked' : 'Comment unliked'
+      };
+    } catch (error) {
+      this.logger.error(`Failed to toggle comment like: ${error.message}`, error.stack);
       throw new BadRequestException(error.message);
     }
   }

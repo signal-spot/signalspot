@@ -194,60 +194,75 @@ export class SignatureConnectionService {
     let score = 0;
     let maxScore = 0;
 
-    // Interests compatibility (30%)
+    // Interests compatibility (25%)
     const interestsScore = this.calculateArrayCompatibility(
       user1.interests || [],
       user2.interests || [],
     );
-    score += interestsScore * 30;
-    maxScore += 30;
+    score += interestsScore * 25;
+    maxScore += 25;
 
-    // Skills compatibility (20%)
+    // Skills compatibility (15%)
     const skillsScore = this.calculateArrayCompatibility(
       user1.skills || [],
       user2.skills || [],
     );
-    score += skillsScore * 20;
-    maxScore += 20;
-
-    // Location compatibility (15%)
-    if (user1.location && user2.location) {
-      const locationScore = user1.location.toLowerCase() === user2.location.toLowerCase() ? 1 : 0.3;
-      score += locationScore * 15;
-    }
+    score += skillsScore * 15;
     maxScore += 15;
 
-    // Signature Connection preferences compatibility (35%)
+    // Location compatibility (10%)
+    if (user1.location && user2.location) {
+      const locationScore = user1.location.toLowerCase() === user2.location.toLowerCase() ? 1 : 0.3;
+      score += locationScore * 10;
+    }
+    maxScore += 10;
+
+    // Signature Connection preferences compatibility (50%)
     if (prefs1 && prefs2) {
-      // Connection types compatibility (15%)
+      // Connection types compatibility (10%)
       const connectionTypesScore = this.calculateArrayCompatibility(
         prefs1.connectionTypes || [],
         prefs2.connectionTypes || [],
       );
-      score += connectionTypesScore * 15;
+      score += connectionTypesScore * 10;
 
-      // Creative interests compatibility (10%)
+      // Creative interests compatibility (8%)
       const creativeScore = this.calculateArrayCompatibility(
         prefs1.creativeInterests || [],
         prefs2.creativeInterests || [],
       );
-      score += creativeScore * 10;
+      score += creativeScore * 8;
 
-      // Music genres compatibility (5%)
-      const musicScore = this.calculateArrayCompatibility(
-        prefs1.musicGenres || [],
-        prefs2.musicGenres || [],
-      );
+      // MBTI compatibility (10%)
+      if (prefs1.mbti && prefs2.mbti) {
+        const mbtiScore = this.calculateMBTICompatibility(prefs1.mbti, prefs2.mbti);
+        score += mbtiScore * 10;
+      }
+      maxScore += 10;
+
+      // Interests tags compatibility (8%)
+      if (prefs1.interests && prefs2.interests) {
+        const interestsTagsScore = this.calculateArrayCompatibility(
+          prefs1.interests || [],
+          prefs2.interests || [],
+        );
+        score += interestsTagsScore * 8;
+      }
+      maxScore += 8;
+
+      // Music taste compatibility (5%)
+      const musicScore = this.calculateMusicCompatibility(prefs1, prefs2);
       score += musicScore * 5;
 
       // Entertainment compatibility (5%)
-      const entertainmentScore = this.calculateArrayCompatibility(
-        prefs1.entertainmentGenres || [],
-        prefs2.entertainmentGenres || [],
-      );
+      const entertainmentScore = this.calculateEntertainmentCompatibility(prefs1, prefs2);
       score += entertainmentScore * 5;
+
+      // Personal story compatibility (4%)
+      const personalStoryScore = this.calculatePersonalStoryCompatibility(prefs1, prefs2);
+      score += personalStoryScore * 4;
     }
-    maxScore += 35;
+    maxScore += 40;
 
     return maxScore > 0 ? Math.round((score / maxScore) * 100) : 0;
   }
@@ -263,6 +278,144 @@ export class SignatureConnectionService {
     const union = new Set([...set1, ...set2]);
     
     return intersection.size / union.size;
+  }
+
+  private calculateMBTICompatibility(mbti1: string, mbti2: string): number {
+    // MBTI 호환성 매트릭스 - 일반적인 MBTI 호환성 기준
+    const compatibilityMatrix: Record<string, string[]> = {
+      'INTJ': ['ENFP', 'ENTP', 'INFJ', 'INTJ'],
+      'INTP': ['ENTJ', 'ESTJ', 'INFJ', 'INTP'],
+      'ENTJ': ['INTP', 'INFP', 'ENFJ', 'ENTJ'],
+      'ENTP': ['INFJ', 'INTJ', 'ENFJ', 'ENTP'],
+      'INFJ': ['ENTP', 'ENFP', 'INTJ', 'INFJ'],
+      'INFP': ['ENTJ', 'ENFJ', 'INFP', 'ENFP'],
+      'ENFJ': ['INFP', 'ISFP', 'ENFJ', 'ENFP'],
+      'ENFP': ['INTJ', 'INFJ', 'ENFJ', 'ENFP'],
+      'ISTJ': ['ESFP', 'ESTP', 'ISTJ', 'ISFJ'],
+      'ISFJ': ['ESFP', 'ESTP', 'ISTJ', 'ISFJ'],
+      'ESTJ': ['ISTP', 'ISFP', 'ISTJ', 'ESTJ'],
+      'ESFJ': ['ISFP', 'ISTP', 'ESFJ', 'ISFJ'],
+      'ISTP': ['ESTJ', 'ESFJ', 'ISTP', 'ESTP'],
+      'ISFP': ['ENFJ', 'ESFJ', 'ESTJ', 'ISFP'],
+      'ESTP': ['ISTJ', 'ISFJ', 'ESTP', 'ISTP'],
+      'ESFP': ['ISTJ', 'ISFJ', 'ESFP', 'ISFP'],
+    };
+
+    const highlyCompatible = compatibilityMatrix[mbti1] || [];
+    
+    if (mbti1 === mbti2) {
+      return 0.8; // 같은 MBTI는 80% 호환성
+    } else if (highlyCompatible.includes(mbti2)) {
+      return 1.0; // 높은 호환성
+    } else {
+      // 기본 호환성 계산 (같은 그룹끼리는 더 높은 점수)
+      const group1 = this.getMBTIGroup(mbti1);
+      const group2 = this.getMBTIGroup(mbti2);
+      
+      if (group1 === group2) {
+        return 0.6; // 같은 그룹
+      } else {
+        return 0.4; // 다른 그룹
+      }
+    }
+  }
+
+  private getMBTIGroup(mbti: string): string {
+    const analysts = ['INTJ', 'INTP', 'ENTJ', 'ENTP'];
+    const diplomats = ['INFJ', 'INFP', 'ENFJ', 'ENFP'];
+    const sentinels = ['ISTJ', 'ISFJ', 'ESTJ', 'ESFJ'];
+    const explorers = ['ISTP', 'ISFP', 'ESTP', 'ESFP'];
+    
+    if (analysts.includes(mbti)) return 'analysts';
+    if (diplomats.includes(mbti)) return 'diplomats';
+    if (sentinels.includes(mbti)) return 'sentinels';
+    if (explorers.includes(mbti)) return 'explorers';
+    return 'unknown';
+  }
+
+  private calculateMusicCompatibility(prefs1: any, prefs2: any): number {
+    let score = 0;
+    
+    // 음악 장르 호환성
+    const genreScore = this.calculateArrayCompatibility(
+      prefs1.musicGenres || [],
+      prefs2.musicGenres || [],
+    );
+    score += genreScore * 0.4;
+    
+    // 좋아하는 아티스트 일치
+    if (prefs1.artist && prefs2.artist) {
+      score += (prefs1.artist.toLowerCase() === prefs2.artist.toLowerCase()) ? 0.6 : 0.2;
+    } else if (prefs1.favoriteArtists && prefs2.favoriteArtists) {
+      const artistScore = this.calculateArrayCompatibility(
+        prefs1.favoriteArtists,
+        prefs2.favoriteArtists,
+      );
+      score += artistScore * 0.6;
+    }
+    
+    return Math.min(score, 1);
+  }
+
+  private calculateEntertainmentCompatibility(prefs1: any, prefs2: any): number {
+    let score = 0;
+    
+    // 엔터테인먼트 장르 호환성
+    const genreScore = this.calculateArrayCompatibility(
+      prefs1.entertainmentGenres || [],
+      prefs2.entertainmentGenres || [],
+    );
+    score += genreScore * 0.5;
+    
+    // 좋아하는 영화 일치
+    if (prefs1.movie && prefs2.movie) {
+      score += (prefs1.movie.toLowerCase() === prefs2.movie.toLowerCase()) ? 0.5 : 0.1;
+    }
+    
+    return Math.min(score, 1);
+  }
+
+  private calculatePersonalStoryCompatibility(prefs1: any, prefs2: any): number {
+    const storyFields = [
+      'memorablePlace',
+      'childhoodMemory',
+      'turningPoint',
+      'proudestMoment',
+      'bucketList',
+      'lifeLesson',
+    ];
+    
+    let filledCount = 0;
+    let similarityScore = 0;
+    
+    for (const field of storyFields) {
+      if (prefs1[field] && prefs2[field]) {
+        filledCount++;
+        // 간단한 텍스트 유사성 (길이와 키워드 기반)
+        const similarity = this.calculateTextSimilarity(prefs1[field], prefs2[field]);
+        similarityScore += similarity;
+      }
+    }
+    
+    if (filledCount === 0) return 0;
+    
+    // 개인 이야기를 많이 공유할수록 높은 점수
+    const sharingBonus = filledCount / storyFields.length * 0.3;
+    const avgSimilarity = similarityScore / filledCount * 0.7;
+    
+    return sharingBonus + avgSimilarity;
+  }
+
+  private calculateTextSimilarity(text1: string, text2: string): number {
+    // 간단한 텍스트 유사성 계산
+    const words1 = new Set(text1.toLowerCase().split(/\s+/));
+    const words2 = new Set(text2.toLowerCase().split(/\s+/));
+    
+    const intersection = new Set([...words1].filter(x => words2.has(x)));
+    const union = new Set([...words1, ...words2]);
+    
+    // Jaccard similarity
+    return union.size > 0 ? intersection.size / union.size : 0;
   }
 
   private async buildConnectionMatch(

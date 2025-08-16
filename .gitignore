@@ -24,6 +24,8 @@ yarn-error.log*
 
 # local env files
 .env
+.env.*
+!.env.example
 .env.local
 .env.development.local
 .env.test.local
@@ -45,6 +47,16 @@ backend/dist/
 backend/build/
 backend/logs/
 backend/uploads/
+
+# Firebase service account keys - NEVER commit!
+*firebase-adminsdk*.json
+signalspot-*.json
+GoogleService-Info.plist
+google-services.json
+firebase_options.dart
+apps/frontend/lib/firebase_options.dart
+apps/backend/*firebase*.json
+apps/frontend/firebase.json
 
 # Frontend specific (React Native)
 frontend/node_modules/

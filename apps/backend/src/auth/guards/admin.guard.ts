@@ -14,9 +14,9 @@ export class AdminGuard implements CanActivate {
       throw new ForbiddenException('User not authenticated');
     }
 
-    // Check if user is verified (admin)
-    if (!user.isVerified) {
-      throw new ForbiddenException('Admin access required - user must be verified');
+    // Check if user is admin
+    if (!user.isAdmin) {
+      throw new ForbiddenException('Admin access required');
     }
 
     return true;

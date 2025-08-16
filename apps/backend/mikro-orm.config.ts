@@ -3,11 +3,21 @@ import { PostgreSqlDriver } from '@mikro-orm/postgresql';
 import { User } from './src/entities/user.entity';
 import { Location } from './src/entities/location.entity';
 import { SignalSpot } from './src/entities/signal-spot.entity';
+import { Spark } from './src/spark/entities/spark.entity';
+import { LocationHistory } from './src/spark/entities/location-history.entity';
+import { SacredSite } from './src/sacred-site/entities/sacred-site.entity';
+import { SiteActivity } from './src/sacred-site/entities/site-activity.entity';
 import { Notification } from './src/notifications/entities/notification.entity';
+import { ChatRoom } from './src/entities/chat-room.entity';
+import { Message } from './src/entities/message.entity';
+import { BlockedUser } from './src/entities/blocked-user.entity';
+import { Report } from './src/entities/report.entity';
+import { Comment } from './src/entities/comment.entity';
 import * as dotenv from 'dotenv';
 
 // Load environment variables
-dotenv.config({ path: '../../.env' });
+dotenv.config({ path: '.env.development' });
+dotenv.config({ path: '.env' });
 
 export default defineConfig({
   driver: PostgreSqlDriver,
@@ -16,8 +26,17 @@ export default defineConfig({
   user: process.env.DB_USERNAME || 'postgres',
   password: process.env.DB_PASSWORD || 'postgres',
   dbName: process.env.DB_DATABASE || 'signalspot',
-  entities: [User, Location, SignalSpot, Notification],
+  entities: [User, Location, SignalSpot, Spark, LocationHistory, SacredSite, SiteActivity, Notification, ChatRoom, Message, BlockedUser, Report, Comment],
   debug: process.env.NODE_ENV !== 'production',
+  // PostgreSQL 타임존 설정
+  pool: {
+    afterCreate: (conn: any, done: any) => {
+      conn.query("SET TIME ZONE 'Asia/Seoul'", (err: any) => {
+        done(err, conn);
+      });
+    }
+  },
+  timezone: '+09:00',
   migrations: {
     path: './migrations',
     pathTs: './migrations',

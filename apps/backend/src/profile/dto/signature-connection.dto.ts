@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsOptional, IsArray, IsString, IsEnum, IsNumber, Min, Max } from 'class-validator';
+import { IsOptional, IsArray, IsString, IsEnum, IsNumber, Min, Max, IsIn } from 'class-validator';
 
 export enum ConnectionType {
   COLLABORATION = 'collaboration',
@@ -131,6 +131,82 @@ export class SignatureConnectionPreferencesDto {
   @IsOptional()
   @IsString()
   connectionBio?: string;
+
+  // 프론트엔드 추가 필드
+  @ApiProperty({ description: 'MBTI personality type', example: 'INTJ' })
+  @IsOptional()
+  @IsString()
+  @IsIn(['INTJ', 'INTP', 'ENTJ', 'ENTP', 'INFJ', 'INFP', 'ENFJ', 'ENFP', 'ISTJ', 'ISFJ', 'ESTJ', 'ESFJ', 'ISTP', 'ISFP', 'ESTP', 'ESFP'])
+  mbti?: string;
+
+  @ApiProperty({ description: 'Favorite movie title', example: '인터스텔라' })
+  @IsOptional()
+  @IsString()
+  movie?: string;
+
+  @ApiProperty({ description: 'Favorite artist name', example: 'BTS' })
+  @IsOptional()
+  @IsString()
+  artist?: string;
+
+  // 프론트엔드 호환성을 위한 추가 필드
+  @ApiProperty({ description: 'Life movie (alias for movie)', example: '인터스텔라' })
+  @IsOptional()
+  @IsString()
+  lifeMovie?: string;
+
+  @ApiProperty({ description: 'Favorite artist (alias for artist)', example: 'BTS' })
+  @IsOptional()
+  @IsString()
+  favoriteArtist?: string;
+
+  @ApiProperty({ description: 'Show movie preference in profile' })
+  @IsOptional()
+  showMovie?: boolean;
+
+  @ApiProperty({ description: 'Show artist preference in profile' })
+  @IsOptional()
+  showArtist?: boolean;
+
+  @ApiProperty({ description: 'Show MBTI in profile' })
+  @IsOptional()
+  showMbti?: boolean;
+
+  @ApiProperty({ description: 'User interests tags', type: [String], example: ['영화감상', '음악감상', '독서'] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  interests?: string[];
+
+  @ApiProperty({ description: '가장 기억에 남는 장소', example: '처음 혼자 여행 갔던 제주도의 작은 카페' })
+  @IsOptional()
+  @IsString()
+  memorablePlace?: string;
+
+  @ApiProperty({ description: '어린 시절 추억', example: '할머니와 함께 만들던 송편' })
+  @IsOptional()
+  @IsString()
+  childhoodMemory?: string;
+
+  @ApiProperty({ description: '인생의 터닝포인트', example: '처음으로 해외에서 일하게 된 날' })
+  @IsOptional()
+  @IsString()
+  turningPoint?: string;
+
+  @ApiProperty({ description: '가장 자랑스러웠던 순간', example: '마라톤 완주했을 때' })
+  @IsOptional()
+  @IsString()
+  proudestMoment?: string;
+
+  @ApiProperty({ description: '버킷리스트', example: '오로라 보기, 책 출간하기' })
+  @IsOptional()
+  @IsString()
+  bucketList?: string;
+
+  @ApiProperty({ description: '인생에서 배운 교훈', example: '실패도 성장의 일부라는 것' })
+  @IsOptional()
+  @IsString()
+  lifeLesson?: string;
 }
 
 export class ConnectionMatchDto {

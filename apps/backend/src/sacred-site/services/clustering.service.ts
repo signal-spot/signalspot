@@ -46,9 +46,9 @@ export class ClusteringService {
    */
   async performClustering(params?: Partial<ClusteringParams>): Promise<Cluster[]> {
     const clusteringParams: ClusteringParams = {
-      minPoints: 5,
-      maxDistance: 200, // 200 meters
-      minWeight: 10,
+      minPoints: 3,      // Reduced from 5 to 3
+      maxDistance: 500,  // Increased from 200m to 500m
+      minWeight: 5,      // Reduced from 10 to 5
       timeDecayFactor: 0.1,
       ...params,
     };
@@ -59,21 +59,38 @@ export class ClusteringService {
       // Get all signal spots with their engagement data
       const spots = await this.getClusteringData();
       
+      this.logger.log(`Found ${spots.length} signal spots for clustering`);
+      
       if (spots.length < clusteringParams.minPoints) {
-        this.logger.warn(`Insufficient data points (${spots.length}) for clustering`);
+        this.logger.warn(`Insufficient data points (${spots.length}) for clustering, need at least ${clusteringParams.minPoints}`);
         return [];
       }
 
       // Apply time-based weighting
       const weightedPoints = this.applyTimeWeighting(spots, clusteringParams.timeDecayFactor);
+      
+      // Log weight distribution
+      const totalWeight = weightedPoints.reduce((sum, p) => sum + p.weight, 0);
+      this.logger.log(`Total weighted points: ${weightedPoints.length}, Total weight: ${totalWeight.toFixed(2)}`);
 
       // Perform DBSCAN clustering
       const clusters = this.dbscanClustering(weightedPoints, clusteringParams);
+      
+      this.logger.log(`DBSCAN found ${clusters.length} raw clusters`);
 
       // Post-process clusters
       const processedClusters = this.postProcessClusters(clusters, clusteringParams);
 
-      this.logger.log(`Clustering completed. Found ${processedClusters.length} clusters`);
+      this.logger.log(`After post-processing: ${processedClusters.length} valid clusters`);
+      
+      // Log details of each cluster
+      processedClusters.forEach((cluster, index) => {
+        this.logger.log(
+          `Cluster ${index + 1}: ${cluster.points.length} points, ` +
+          `weight: ${cluster.totalWeight.toFixed(2)}, ` +
+          `radius: ${cluster.radius.toFixed(0)}m`
+        );
+      });
 
       return processedClusters;
     } catch (error) {

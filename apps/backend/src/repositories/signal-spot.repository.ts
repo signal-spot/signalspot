@@ -1,8 +1,11 @@
 import { Injectable } from '@nestjs/common';
-import { EntityRepository, EntityManager } from '@mikro-orm/core';
+import { LoggerService } from '../common/services/logger.service';
+import { EntityRepository, EntityManager, Connection } from '@mikro-orm/core';
 import { InjectRepository } from '@mikro-orm/nestjs';
+import { SqlEntityManager } from '@mikro-orm/postgresql';
 import { SignalSpot, SpotId, SpotStatus, SpotVisibility, SpotType } from '../entities/signal-spot.entity';
 import { User } from '../entities/user.entity';
+import { BlockedUser } from '../entities/blocked-user.entity';
 import { Coordinates } from '../entities/location.entity';
 
 // Domain Repository Interface Token
@@ -123,7 +126,8 @@ export class SignalSpotRepository implements ISignalSpotRepository {
   constructor(
     @InjectRepository(SignalSpot)
     private readonly repository: EntityRepository<SignalSpot>,
-    private readonly em: EntityManager
+    private readonly em: SqlEntityManager,
+    private readonly logger: LoggerService
   ) {}
 
   async findById(id: SpotId): Promise<SignalSpot | null> {
@@ -165,7 +169,7 @@ export class SignalSpotRepository implements ISignalSpotRepository {
     const offset = options.offset || 0;
     
     // PostGIS spatial query for nearby signal spots
-    const result = await this.em.getConnection().getKnex().raw(`
+    const result = await this.em.getConnection().execute(`
       SELECT s.*, 
              u.id as creator_id,
              u.username as creator_username,
@@ -173,16 +177,13 @@ export class SignalSpotRepository implements ISignalSpotRepository {
              u.first_name as creator_first_name,
              u.last_name as creator_last_name,
              u.avatar_url as creator_avatar_url,
-             u.is_email_verified as creator_is_verified,
              ST_Distance(
                ST_Point(s.longitude, s.latitude),
                ST_Point(?, ?)
              ) as distance_meters
       FROM signal_spot s
-      JOIN "user" u ON s.creator_id = u.id
-      WHERE s.is_active = true 
-        AND (s.expires_at IS NULL OR s.expires_at > NOW())
-        AND ST_DWithin(
+      LEFT JOIN "user" u ON s.creator_id = u.id
+      WHERE ST_DWithin(
           ST_Point(s.longitude, s.latitude),
           ST_Point(?, ?),
           ?
@@ -199,7 +200,7 @@ export class SignalSpotRepository implements ISignalSpotRepository {
       offset
     ]);
     
-    return this.mapRawResultsToEntities(result.rows);
+    return this.mapRawResultsToEntities(result);
   }
 
   private mapRawResultsToEntities(rawResults: any[]): SignalSpot[] {
@@ -229,7 +230,14 @@ export class SignalSpotRepository implements ISignalSpotRepository {
         createdAt: new Date(row.created_at),
         updatedAt: new Date(row.updated_at),
         expiresAt: new Date(row.expires_at),
-        creator: row.user_id
+        creator: row.creator_id ? {
+          id: row.creator_id,
+          username: row.creator_username,
+          email: row.creator_email,
+          firstName: row.creator_first_name,
+          lastName: row.creator_last_name,
+          avatarUrl: row.creator_avatar_url
+        } : row.creator_id
       });
 
       // Add distance if available
@@ -262,7 +270,7 @@ export class SignalSpotRepository implements ISignalSpotRepository {
     visibility?: SpotVisibility
   ): Promise<SignalSpot[]> {
     const params: any[] = [coordinates.latitude, coordinates.longitude, radiusKm * 1000];
-    let whereClause = 's.is_active = true AND s.status = \'active\' AND s.expires_at > NOW()';
+    let whereClause = '1=1';  // 모든 spot 조회
 
     if (visibility) {
       whereClause += ' AND s.visibility = $' + (params.length + 1);
@@ -333,16 +341,36 @@ export class SignalSpotRepository implements ISignalSpotRepository {
       tags?: string[];
     } = {}
   ): Promise<SignalSpot[]> {
+    // Get list of blocked users (both users who blocked current user and users blocked by current user)
+    const blockedUsers = await this.repository.getEntityManager().find(BlockedUser, {
+      $or: [
+        { blocker: user.id },
+        { blocked: user.id }
+      ]
+    });
+
+    const blockedUserIds = new Set<string>();
+    blockedUsers.forEach(block => {
+      if (block.blocker.id === user.id) {
+        blockedUserIds.add(block.blocked.id);
+      } else {
+        blockedUserIds.add(block.blocker.id);
+      }
+    });
+
     const conditions: any = {
-      isActive: true,
-      status: SpotStatus.ACTIVE,
-      expiresAt: { $gt: new Date() },
+      // 모든 spot 조회 - 상태 조건 제거
       $or: [
         { visibility: SpotVisibility.PUBLIC },
         { creator: user.id }
         // TODO: Add friends visibility when friend system is implemented
       ]
     };
+
+    // Exclude spots from blocked users
+    if (blockedUserIds.size > 0) {
+      conditions.creator = { $nin: Array.from(blockedUserIds) };
+    }
 
     if (options.types && options.types.length > 0) {
       conditions.type = { $in: options.types };
@@ -361,12 +389,16 @@ export class SignalSpotRepository implements ISignalSpotRepository {
 
     // If location-based filtering is requested
     if (coordinates && radiusKm) {
-      return this.findNearby(coordinates, radiusKm, {
+      // Also need to filter blocked users from nearby spots
+      const nearbySpots = await this.findNearby(coordinates, radiusKm, {
         limit: options.limit,
         offset: options.offset,
         types: options.types,
         tags: options.tags
       });
+      
+      // Filter out spots from blocked users
+      return nearbySpots.filter(spot => !blockedUserIds.has(spot.creator.id));
     }
 
     return await query;
@@ -374,9 +406,7 @@ export class SignalSpotRepository implements ISignalSpotRepository {
 
   async findActive(coordinates?: Coordinates, radiusKm?: number): Promise<SignalSpot[]> {
     const conditions = {
-      isActive: true,
-      status: SpotStatus.ACTIVE,
-      expiresAt: { $gt: new Date() }
+      // 모든 spot 조회 - 상태 조건 제거
     };
 
     if (coordinates && radiusKm) {
@@ -424,9 +454,13 @@ export class SignalSpotRepository implements ISignalSpotRepository {
       timeframe?: 'hour' | 'day' | 'week' | 'month';
     } = {}
   ): Promise<SignalSpot[]> {
-    const since = new Date();
+    const limit = options.limit || 20;
     
-    switch (options.timeframe) {
+    // 기본값을 일주일로 설정
+    const since = new Date();
+    const timeframe = options.timeframe || 'week';
+    
+    switch (timeframe) {
       case 'hour':
         since.setHours(since.getHours() - 1);
         break;
@@ -440,31 +474,69 @@ export class SignalSpotRepository implements ISignalSpotRepository {
         since.setMonth(since.getMonth() - 1);
         break;
       default:
-        since.setDate(since.getDate() - 1); // Default to last day
+        since.setDate(since.getDate() - 7); // 기본값 일주일
     }
 
-    const conditions = {
-      isActive: true,
-      status: SpotStatus.ACTIVE,
-      expiresAt: { $gt: new Date() },
-      createdAt: { $gte: since }
-    };
-
+    // If coordinates and radius are provided, use nearby logic with popularity sorting
     if (coordinates && radiusKm) {
-      return this.findNearby(coordinates, radiusKm, {
-        limit: options.limit || 20,
-        excludeExpired: true
+      const radiusInDegrees = radiusKm / 111.32;
+      const spots = await this.repository.find(
+        {
+          $and: [
+            {
+              latitude: {
+                $gte: coordinates.latitude - radiusInDegrees,
+                $lte: coordinates.latitude + radiusInDegrees,
+              },
+            },
+            {
+              longitude: {
+                $gte: coordinates.longitude - radiusInDegrees,
+                $lte: coordinates.longitude + radiusInDegrees,
+              },
+            },
+            {
+              status: { $ne: SpotStatus.REMOVED },
+            },
+            {
+              createdAt: { $gte: since }
+            }
+          ],
+        },
+        {
+          populate: ['creator'],
+          orderBy: [
+            { likeCount: 'DESC' },
+            { viewCount: 'DESC' },
+            { replyCount: 'DESC' },
+            { createdAt: 'DESC' }
+          ],
+          limit
+        }
+      );
+
+      // Filter by actual distance
+      return spots.filter(spot => {
+        const spotCoordinates = Coordinates.create(spot.latitude, spot.longitude);
+        return spotCoordinates.distanceTo(coordinates) <= radiusKm;
       });
     }
 
+    // Global popular spots - 최근 일주일 이내, expired 여부 상관없이
+    const conditions: any = {
+      status: { $ne: SpotStatus.REMOVED },
+      createdAt: { $gte: since }
+    };
+
     return await this.repository.find(conditions, {
       populate: ['creator'],
-      orderBy: { 
-        likeCount: 'DESC', 
-        viewCount: 'DESC', 
-        replyCount: 'DESC' 
-      },
-      limit: options.limit || 20
+      orderBy: [
+        { likeCount: 'DESC' },
+        { viewCount: 'DESC' },
+        { replyCount: 'DESC' },
+        { createdAt: 'DESC' }
+      ],
+      limit
     });
   }
 
@@ -474,10 +546,7 @@ export class SignalSpotRepository implements ISignalSpotRepository {
     limit = 10
   ): Promise<SignalSpot[]> {
     const conditions = {
-      isActive: true,
-      status: SpotStatus.ACTIVE,
-      expiresAt: { $gt: new Date() },
-      createdAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } // Last 24 hours
+      createdAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } // Last 30 days for maximum coverage
     };
 
     const allSpots = await this.repository.find(conditions, {
@@ -485,6 +554,9 @@ export class SignalSpotRepository implements ISignalSpotRepository {
     });
 
     let spots = allSpots;
+
+    this.logger.debug('Finding trending spots', 'SignalSpotRepository');
+    this.logger.debug(`Found ${spots.length} trending spots`, 'SignalSpotRepository');
     
     // Filter by location if provided
     if (coordinates && radiusKm) {

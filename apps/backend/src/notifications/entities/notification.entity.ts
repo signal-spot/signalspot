@@ -14,6 +14,10 @@ export enum NotificationType {
   LOCATION_SHARING_REQUEST = 'location_sharing_request',
   FRIEND_REQUEST = 'friend_request',
   ACHIEVEMENT_UNLOCKED = 'achievement_unlocked',
+  SPOT_LIKED = 'spot_liked',
+  SPOT_COMMENTED = 'spot_commented',
+  COMMENT_LIKED = 'comment_liked',
+  COMMENT_REPLIED = 'comment_replied',
 }
 
 export enum NotificationStatus {

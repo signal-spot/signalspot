@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { LoggerModule } from './modules/logger.module';
+import { LoggerService } from './services/logger.service';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { ContextController } from './controllers/context.controller';
 import { AnalyticsController } from './controllers/analytics.controller';
@@ -17,6 +19,7 @@ import { Spark } from '../spark/entities/spark.entity';
 @Module({
   imports: [
     MikroOrmModule.forFeature([User, SignalSpot, Spark]),
+    LoggerModule,
   ],
   controllers: [ContextController, AnalyticsController, PerformanceController],
   providers: [
@@ -27,6 +30,7 @@ import { Spark } from '../spark/entities/spark.entity';
     CacheService,
     LocationCacheService,
     UserCacheService,
+    LoggerService,
   ],
   exports: [
     ContextEnhancementService,
@@ -36,6 +40,7 @@ import { Spark } from '../spark/entities/spark.entity';
     CacheService,
     LocationCacheService,
     UserCacheService,
+    LoggerService,
   ],
 })
 export class CommonModule {}

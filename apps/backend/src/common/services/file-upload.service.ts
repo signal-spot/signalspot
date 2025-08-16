@@ -5,6 +5,7 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import { Express } from 'express';
 import 'multer';
+import { LoggerService } from './logger.service';
 
 export interface FileUploadResult {
   url: string;
@@ -41,7 +42,10 @@ export class FileUploadService {
   private readonly allowedImageTypes: string[];
   private readonly allowedImageExtensions: string[];
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly logger: LoggerService
+  ) {
     this.uploadDir = this.configService.get<string>('UPLOAD_DIR') || 'uploads';
     this.maxFileSize = this.configService.get<number>('MAX_FILE_SIZE') || 10 * 1024 * 1024; // 10MB
     this.allowedImageTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
@@ -147,7 +151,7 @@ export class FileUploadService {
       await fs.promises.unlink(fullPath);
     } catch (error) {
       // File might not exist, which is fine
-      console.warn(`Failed to delete file: ${filePath}`, error);
+      this.logger.warn(`Failed to delete file: ${filePath}`, 'FileUploadService');
     }
   }
 

@@ -175,7 +175,7 @@ export class SpotTags {
 
     const validTags = tags
       .map(tag => tag.trim().toLowerCase())
-      .filter(tag => tag.length > 0 && tag.length <= 30)
+      .filter(tag => tag.length > 0 && tag.length <= 15)
       .filter((tag, index, array) => array.indexOf(tag) === index); // Remove duplicates
 
     return new SpotTags(validTags);
@@ -199,8 +199,8 @@ export class SpotTags {
     }
 
     const normalizedTag = tag.trim().toLowerCase();
-    if (normalizedTag.length === 0 || normalizedTag.length > 30) {
-      throw new Error('Tag must be between 1 and 30 characters');
+    if (normalizedTag.length === 0 || normalizedTag.length > 15) {
+      throw new Error('Tag must be between 1 and 15 characters');
     }
 
     if (this.hasTag(normalizedTag)) {
@@ -255,6 +255,7 @@ export enum SpotType {
 export enum SpotInteractionType {
   VIEW = 'view',
   LIKE = 'like',
+  UNLIKE = 'unlike',
   DISLIKE = 'dislike',
   REPLY = 'reply',
   SHARE = 'share',
@@ -398,18 +399,25 @@ export class SignalSpot extends AggregateRoot {
 
   @Property({ type: 'boolean', default: false })
   isPinned = false;
+  @Property({ type: 'boolean', default: false })
+  isSystemMessage = false;
+
+  @Property({ nullable: true })
+  customSenderName?: string;
 
   @Property({ type: 'json', nullable: true })
   metadata?: Record<string, any>;
+  @Property({ type: 'json', default: '[]' })
+  likedBy: string[] = [];
 
-  @Property({ onCreate: () => new Date() })
+  @Property({ type: 'timestamptz', defaultRaw: 'NOW()' })
   @Index()
-  createdAt: Date = new Date();
+  createdAt: Date;
 
-  @Property({ type: 'date', onUpdate: () => new Date() })
-  updatedAt: Date = new Date();
+  @Property({ type: 'timestamptz', defaultRaw: 'NOW()', onUpdate: () => new Date() })
+  updatedAt: Date;
 
-  @Property({ type: 'date' })
+  @Property({ type: 'timestamptz' })
   @Index()
   expiresAt: Date;
 
@@ -458,7 +466,7 @@ export class SignalSpot extends AggregateRoot {
     spot.type = data.type ?? SpotType.ANNOUNCEMENT;
     spot.tags = spotTags.isEmpty() ? undefined : spotTags.tags;
     spot.metadata = data.metadata;
-    spot.createdAt = new Date();
+    // createdAt은 데이터베이스에서 자동 설정 (NOW())
     spot.expiresAt = new Date(Date.now() + duration.milliseconds);
     
     // Emit domain event
@@ -475,11 +483,7 @@ export class SignalSpot extends AggregateRoot {
 
   // Business Logic Methods
   public recordView(viewingUser?: User): void {
-    // Business rule: Don't count creator's own views
-    if (viewingUser && viewingUser.id === this.creator.id) {
-      return;
-    }
-
+    // Allow all users including creator to increment view count
     this.viewCount++;
     this.updatedAt = new Date();
 
@@ -506,6 +510,17 @@ export class SignalSpot extends AggregateRoot {
       throw new Error('User cannot interact with this spot');
     }
 
+    // Ensure likedBy is initialized as array
+    if (!Array.isArray(this.likedBy)) {
+      this.likedBy = [];
+    }
+
+    // Check if user already liked
+    if (this.likedBy.includes(user.id)) {
+      throw new Error('User has already liked this spot');
+    }
+
+    this.likedBy.push(user.id);
     this.likeCount++;
     this.updatedAt = new Date();
 
@@ -514,6 +529,62 @@ export class SignalSpot extends AggregateRoot {
       user.id,
       SpotInteractionType.LIKE
     ));
+  }
+
+  public removeLike(user: User): void {
+    if (!this.canInteract(user)) {
+      throw new Error('User cannot interact with this spot');
+    }
+
+    // Ensure likedBy is initialized as array
+    if (!Array.isArray(this.likedBy)) {
+      this.likedBy = [];
+    }
+
+    const index = this.likedBy.indexOf(user.id);
+    if (index === -1) {
+      throw new Error('User has not liked this spot');
+    }
+
+    this.likedBy.splice(index, 1);
+    this.likeCount = Math.max(0, this.likeCount - 1);
+    this.updatedAt = new Date();
+
+    this.addDomainEvent(new SpotInteractionEvent(
+      this.getSpotId(),
+      user.id,
+      SpotInteractionType.UNLIKE
+    ));
+  }
+
+  public toggleLike(userId: string): boolean {
+    // Ensure likedBy is initialized as array
+    if (!Array.isArray(this.likedBy)) {
+      this.likedBy = [];
+    }
+
+    const index = this.likedBy.indexOf(userId);
+    let isLiked: boolean;
+    
+    if (index > -1) {
+      this.likedBy.splice(index, 1);
+      this.likeCount = Math.max(0, this.likeCount - 1);
+      isLiked = false;
+    } else {
+      this.likedBy.push(userId);
+      this.likeCount++;
+      isLiked = true;
+    }
+    
+    this.updatedAt = new Date();
+    return isLiked;
+  }
+
+  public hasUserLiked(userId: string): boolean {
+    if (!this.likedBy || !Array.isArray(this.likedBy)) {
+      return false;
+    }
+    return this.likedBy.includes(userId);
   }
 
   public addDislike(user: User): void {
@@ -700,27 +771,21 @@ export class SignalSpot extends AggregateRoot {
 
   // Business Rule Methods
   public canInteract(user: User): boolean {
-    if (!this.isActive || this.status !== SpotStatus.ACTIVE) {
+    // Allow all interactions for now - remove restrictive conditions
+    // This allows users to comment on any spots they can view
+    
+    // Basic check - user must be able to view the spot
+    if (!this.canBeViewedBy(user)) {
       return false;
     }
-
-    if (this.isExpired()) {
-      return false;
-    }
-
-    if (this.visibility === SpotVisibility.PRIVATE && this.creator.id !== user.id) {
-      return false;
-    }
-
-    if (this.visibility === SpotVisibility.FRIENDS && this.creator.id !== user.id) {
-      // TODO: Implement friend relationship check
-      return false;
-    }
-
+    
+    // Allow interaction even if spot is expired or inactive
+    // This lets users still comment on older spots
     return true;
   }
 
   public canBeViewedBy(user: User): boolean {
+    // Always allow viewing public spots regardless of status
     if (this.visibility === SpotVisibility.PUBLIC) {
       return true;
     }
@@ -734,10 +799,11 @@ export class SignalSpot extends AggregateRoot {
         return true;
       }
       // TODO: Implement friend relationship check
-      return false;
+      // For now, treat FRIENDS visibility as PUBLIC
+      return true;
     }
 
-    return false;
+    return true; // Default to allowing view
   }
 
   public canBeEditedBy(user: User): boolean {
@@ -867,14 +933,21 @@ export class SignalSpot extends AggregateRoot {
 
   // Get summary for API responses
   public getSummary(): any {
+    // MikroORM Reference unwrapping
+    const creatorEntity = this.creator?.unwrap ? this.creator.unwrap() : this.creator;
+    
+    // 디버깅: creator 정보 확인 - TODO: Remove debug logs after testing
+    
     return {
       id: this.id,
-      creatorId: this.creator.id,
+      creatorId: creatorEntity?.id,
+      creatorUsername: creatorEntity?.username, // 추가: creator의 username 포함
+      creatorAvatar: creatorEntity?.avatarUrl, // 추가: creator의 avatarUrl 포함
       message: this.message,
       title: this.title,
       location: {
         latitude: this.latitude,
-        longitude: this.longitude,
+        longitude: this.longitude,  
         radius: this.radiusInMeters
       },
       status: this.status,

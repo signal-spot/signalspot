@@ -7,9 +7,19 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { EntityManager } from '@mikro-orm/core';
 import * as bcrypt from 'bcryptjs';
-import { User } from '../entities/user.entity';
+import { User, UserStatus } from '../entities/user.entity';
 import { ConfigService } from '@nestjs/config';
+import { LoggerService } from '../common/services/logger.service';
 import { RegisterDto, LoginDto } from './dto/auth.dto';
+
+// Firebase Admin SDK
+let admin: any;
+try {
+  admin = require('firebase-admin');
+} catch (error) {
+  // Firebase Admin SDK not available
+  admin = null;
+}
 
 
 export interface AuthTokens {
@@ -41,7 +51,6 @@ export interface AuthResponse {
     firstName?: string;
     lastName?: string;
     avatarUrl?: string;
-    isEmailVerified: boolean;
   };
 }
 
@@ -56,6 +65,7 @@ export class AuthService {
     private readonly em: EntityManager,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly logger: LoggerService,
   ) {}
 
   async register(registerDto: RegisterDto): Promise<AuthResponse> {
@@ -84,10 +94,12 @@ export class AuthService {
       email,
       username,
       password: hashedPassword,
-      isEmailVerified: false,
       loginAttempts: 0,
       accountLocked: false,
     });
+    
+    // Set status to VERIFIED immediately
+    user.status = UserStatus.VERIFIED;
 
     await this.em.persistAndFlush(user);
 
@@ -99,7 +111,6 @@ export class AuthService {
         id: user.id,
         email: user.email,
         username: user.username,
-        isEmailVerified: user.isEmailVerified,
       },
       accessToken,
       refreshToken,
@@ -137,6 +148,16 @@ export class AuthService {
 
     // Update last login
     user.lastLoginAt = new Date();
+    
+    // Update device token if provided
+    if (loginDto.deviceToken && loginDto.platform) {
+      if (loginDto.platform === 'fcm') {
+        user.fcmToken = loginDto.deviceToken;
+      } else if (loginDto.platform === 'apns') {
+        user.apnsToken = loginDto.deviceToken;
+      }
+    }
+    
     await this.em.flush();
 
     // Generate tokens
@@ -147,24 +168,33 @@ export class AuthService {
         id: user.id,
         email: user.email,
         username: user.username,
-        isEmailVerified: user.isEmailVerified,
       },
       accessToken,
       refreshToken,
     };
   }
 
-  async logout(userId: string): Promise<void> {
+  async logout(userId: string, platform?: 'fcm' | 'apns'): Promise<void> {
     // In a production app, you might want to blacklist the token
     // For now, we'll just update the user's last logout time
     const user = await this.em.findOne(User, { id: userId });
     if (user) {
       user.lastLogoutAt = new Date();
+      
+      // Clear device token on logout if platform is specified
+      if (platform) {
+        if (platform === 'fcm') {
+          user.fcmToken = null;
+        } else if (platform === 'apns') {
+          user.apnsToken = null;
+        }
+      }
+      
       await this.em.flush();
     }
   }
 
-  async refreshToken(refreshToken: string): Promise<{ accessToken: string }> {
+  async refreshToken(refreshToken: string): Promise<{ accessToken: string; refreshToken: string }> {
     try {
       const payload = this.jwtService.verify(refreshToken, {
         secret: this.configService.get('JWT_REFRESH_SECRET'),
@@ -175,21 +205,18 @@ export class AuthService {
         throw new UnauthorizedException('Invalid refresh token');
       }
 
-      const accessToken = this.jwtService.sign(
-        { 
-          sub: user.id, 
-          email: user.email,
-          username: user.username,
-        },
-        {
-          secret: this.configService.get('JWT_SECRET'),
-          expiresIn: this.configService.get('JWT_EXPIRES_IN', '15m'),
-        }
-      );
+      // Update last login time
+      user.lastLoginAt = new Date();
+      await this.em.flush();
 
-      return { accessToken };
-    } catch {
-      throw new UnauthorizedException('Invalid refresh token');
+      // Generate new tokens (both access and refresh)
+      const tokens = await this.generateTokens(user);
+
+      this.logger.logWithUser(`Token refreshed`, user.id, 'AuthService');
+      return tokens;
+    } catch (error) {
+      this.logger.error('Refresh token validation failed', error.message, 'AuthService');
+      throw new UnauthorizedException('Invalid or expired refresh token');
     }
   }
 
@@ -263,7 +290,7 @@ export class AuthService {
       throw new BadRequestException('User not found');
     }
 
-    if (user.isEmailVerified) {
+    if (user.emailVerifiedAt) {
       throw new BadRequestException('Email is already verified');
     }
 
@@ -275,7 +302,7 @@ export class AuthService {
 
     // TODO: Send email with verification link
     // For now, just log the token (in production, use proper email service)
-    console.log(`Email verification token for ${user.email}: ${verificationToken}`);
+    this.logger.logSecure('Email verification token generated', { email: user.email, token: verificationToken }, 'AuthService');
     
     // In production, you would send an email like:
     // await this.emailService.sendVerificationEmail(user.email, verificationToken);
@@ -294,11 +321,10 @@ export class AuthService {
         throw new BadRequestException('User not found');
       }
 
-      if (user.isEmailVerified) {
+      if (user.emailVerifiedAt) {
         return { message: 'Email is already verified' };
       }
 
-      user.isEmailVerified = true;
       user.emailVerifiedAt = new Date();
       await this.em.flush();
 
@@ -315,11 +341,342 @@ export class AuthService {
       return { message: 'If the email exists, a verification link has been sent' };
     }
 
-    if (user.isEmailVerified) {
+    if (user.emailVerifiedAt) {
       throw new BadRequestException('Email is already verified');
     }
 
     await this.sendEmailVerification(user.id);
     return { message: 'Verification email sent successfully' };
+  }
+
+  // Phone Authentication Methods
+  async findOrCreateUserByPhone(phoneNumber: string, userData?: {
+    username?: string;
+    firstName?: string;
+    lastName?: string;
+  }): Promise<{ user: User; profileCompleted: boolean }> {
+    // 1. 기존 사용자 확인
+    let user = await this.em.findOne(User, { phoneNumber });
+
+    if (user) {
+      // 기존 사용자
+      user.lastLoginAt = new Date();
+      
+      // Update username if provided and different
+      if (userData?.username && user.username !== userData.username) {
+        // Check if new username is available
+        const existingWithUsername = await this.em.findOne(User, { 
+          username: userData.username,
+          id: { $ne: user.id }
+        });
+        
+        if (!existingWithUsername) {
+          user.username = userData.username;
+        }
+      }
+      
+      // Update first/last name if provided
+      if (userData?.firstName) {
+        user.firstName = userData.firstName;
+      }
+      if (userData?.lastName) {
+        user.lastName = userData.lastName;
+      }
+      
+      await this.em.flush();
+      return { user, profileCompleted: user.profileCompleted };
+    }
+
+    // 2. 신규 사용자 - 최소 정보만으로 생성
+    const timestamp = Date.now();
+    
+    // Create new user using domain factory with temporary values
+    user = User.create({
+      phoneNumber,
+      // 임시 값들 - 프로필 설정에서 업데이트 예정
+      email: `temp_${timestamp}@signalspot.phone`,
+      username: `temp_${timestamp}`,
+      password: await bcrypt.hash(phoneNumber + timestamp, this.SALT_ROUNDS),
+      isPhoneVerified: true,
+      status: UserStatus.PENDING_PROFILE, // 새로운 상태 - 프로필 설정 대기
+      profileCompleted: false, // 프로필 완성 여부 플래그
+      firstName: userData?.firstName,
+      lastName: userData?.lastName,
+    });
+
+    user.lastLoginAt = new Date();
+    await this.em.persistAndFlush(user);
+
+    return { user, profileCompleted: false }; // 새 사용자는 항상 프로필 미완성
+  }
+
+  async authenticateWithPhone(phoneNumber: string, userData?: {
+    username?: string;
+    firstName?: string;
+    lastName?: string;
+  }): Promise<AuthResponse> {
+    const { user } = await this.findOrCreateUserByPhone(phoneNumber, userData);
+
+    // Generate tokens
+    const { accessToken, refreshToken } = await this.generateTokens(user);
+
+    return {
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+      },
+      accessToken,
+      refreshToken,
+    };
+  }
+
+  async checkPhoneExists(phoneNumber: string): Promise<boolean> {
+    const user = await this.em.findOne(User, { phoneNumber });
+    return !!user;
+  }
+
+  async verifyFirebaseToken(firebaseToken: string): Promise<{ phoneNumber: string; uid: string }> {
+    // Development/test mode check
+    const isDevelopment = this.configService.get('NODE_ENV') !== 'production';
+    
+    // Handle test tokens in development mode
+    if (isDevelopment && firebaseToken.startsWith('test-token-')) {
+      this.logger.warn('[DEV] Test token detected, skipping Firebase verification', 'AuthService');
+      // Extract phone number from request context or use a test phone number
+      // This should only be used in development
+      return {
+        phoneNumber: '+8201012345678', // Test phone number
+        uid: `test-uid-${Date.now()}`,
+      };
+    }
+    
+    if (!admin) {
+      this.logger.warn('Firebase Admin SDK not available, skipping token verification', 'AuthService');
+      throw new UnauthorizedException('Firebase authentication not available');
+    }
+
+    try {
+      // Check if Firebase is initialized
+      if (!admin.apps.length) {
+        // Initialize Firebase if not already initialized
+        const serviceAccount = this.configService.get('firebase.serviceAccount');
+        if (!serviceAccount) {
+          this.logger.error('Firebase service account not found in config', null, 'AuthService');
+          throw new UnauthorizedException('Firebase not configured');
+        }
+        
+        this.logger.log('Initializing Firebase Admin SDK', 'AuthService');
+        admin.initializeApp({
+          credential: admin.credential.cert(serviceAccount),
+          projectId: this.configService.get('firebase.projectId'),
+        });
+        this.logger.log('Firebase Admin SDK initialized successfully', 'AuthService');
+      }
+
+      // Log token info for debugging (remove in production)
+      this.logger.debug(`Attempting to verify Firebase token: ${firebaseToken?.substring(0, 20)}...`, 'AuthService');
+
+      // Verify the Firebase token
+      const decodedToken = await admin.auth().verifyIdToken(firebaseToken);
+      
+      // Extract phone number from token
+      const phoneNumber = decodedToken.phone_number;
+      if (!phoneNumber) {
+        this.logger.warn('Phone number not found in decoded Firebase token', 'AuthService');
+        throw new UnauthorizedException('Phone number not found in Firebase token');
+      }
+
+      this.logger.debug(`Firebase token verified successfully for phone: ${phoneNumber}`, 'AuthService');
+      
+      return {
+        phoneNumber,
+        uid: decodedToken.uid,
+      };
+    } catch (error) {
+      // Log more detailed error information
+      if (error.code === 'auth/argument-error') {
+        this.logger.error('Invalid Firebase token format', error.message, 'AuthService');
+      } else if (error.code === 'auth/id-token-expired') {
+        this.logger.error('Firebase token has expired', error.message, 'AuthService');
+      } else if (error.code === 'auth/id-token-revoked') {
+        this.logger.error('Firebase token has been revoked', error.message, 'AuthService');
+      } else if (error.code === 'auth/invalid-id-token') {
+        this.logger.error('Invalid Firebase ID token', error.message, 'AuthService');
+      } else {
+        this.logger.error(`Firebase token verification failed: ${error.message}`, error.stack, 'AuthService');
+      }
+      
+      throw new UnauthorizedException('Invalid Firebase token');
+    }
+  }
+
+  
+  async authenticateWithPhoneAndFirebase(
+    phoneNumber: string, 
+    firebaseToken: string,
+    userData?: {
+      username?: string;
+      firstName?: string;
+      lastName?: string;
+    }
+  ): Promise<AuthResponse & { profileCompleted: boolean }> {
+    // Verify Firebase token
+    const verifiedData = await this.verifyFirebaseToken(firebaseToken);
+    
+    // In development mode with test tokens, use the provided phone number
+    const isDevelopment = this.configService.get('NODE_ENV') !== 'production';
+    if (isDevelopment && firebaseToken.startsWith('test-token-')) {
+      // Override with the actual phone number from request for test mode
+      verifiedData.phoneNumber = phoneNumber;
+    }
+    
+    // Ensure the phone number matches the one in the token
+    if (verifiedData.phoneNumber !== phoneNumber) {
+      throw new UnauthorizedException('Phone number mismatch with Firebase token');
+    }
+
+    // 전화번호로 사용자 찾기 또는 생성
+    const { user, profileCompleted } = await this.findOrCreateUserByPhone(phoneNumber, userData);
+    
+    // Store Firebase UID for future reference
+    if (!user.firebaseUid) {
+      user.firebaseUid = verifiedData.uid;
+    }
+    
+    // JWT 토큰 생성
+    const tokens = await this.generateTokens(user);
+    
+    // 로그인 시간 업데이트
+    user.recordLogin();
+    await this.em.flush();
+
+    return {
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        firstName: user.firstName,
+        lastName: user.lastName,
+      },
+      profileCompleted,
+    };
+  }
+
+  // Account deletion methods
+  async deleteAccount(userId: string, password?: string): Promise<{ 
+    message: string; 
+    recoveryToken: string;
+    recoveryExpiresAt: Date;
+  }> {
+    const user = await this.em.findOne(User, { id: userId });
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }
+
+    // Check if account is already deleted
+    if (user.isDeleted()) {
+      throw new BadRequestException('Account is already deleted');
+    }
+
+    // If password is provided, verify it (for extra security)
+    if (password) {
+      const isPasswordValid = await bcrypt.compare(password, user.password);
+      if (!isPasswordValid) {
+        throw new UnauthorizedException('Invalid password');
+      }
+    }
+
+    // Perform soft delete
+    user.deactivate('User requested account deletion', userId);
+    
+    // Clear all user sessions (in production, you might want to blacklist tokens)
+    // For now, just log the deletion
+    this.logger.logWithUser(`Account deletion initiated`, userId, 'AuthService');
+    
+    await this.em.flush();
+
+    return {
+      message: 'Your account has been successfully deleted. You have 30 days to recover your account using the recovery token.',
+      recoveryToken: user.recoveryToken!,
+      recoveryExpiresAt: user.recoveryTokenExpires!,
+    };
+  }
+
+  async recoverAccount(recoveryToken: string, email: string): Promise<{
+    message: string;
+    user: {
+      id: string;
+      email: string;
+      username: string;
+    };
+  }> {
+    // Find user by recovery token
+    const user = await this.em.findOne(User, { 
+      recoveryToken,
+      email: { $like: `deleted_%@signalspot.deleted` } // Pattern for deleted accounts
+    });
+
+    if (!user) {
+      throw new BadRequestException('Invalid recovery token');
+    }
+
+    // Check if account can be recovered
+    if (!user.canRecover()) {
+      throw new BadRequestException('Recovery period has expired or recovery is not available');
+    }
+
+    // Recover the account
+    user.recover();
+    
+    // Set new email (since the original was anonymized)
+    user.email = email;
+    
+    // Generate a temporary username if needed
+    const timestamp = Date.now();
+    user.username = `recovered_${timestamp}`;
+    
+    await this.em.flush();
+
+    this.logger.logWithUser(`Account recovered successfully`, user.id, 'AuthService');
+
+    return {
+      message: 'Your account has been recovered. Please update your profile information.',
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+      },
+    };
+  }
+
+  async checkRecoveryStatus(recoveryToken: string): Promise<{
+    canRecover: boolean;
+    expiresAt?: Date;
+    message: string;
+  }> {
+    const user = await this.em.findOne(User, { recoveryToken });
+
+    if (!user) {
+      return {
+        canRecover: false,
+        message: 'Invalid recovery token',
+      };
+    }
+
+    if (!user.canRecover()) {
+      return {
+        canRecover: false,
+        message: 'Recovery period has expired',
+      };
+    }
+
+    return {
+      canRecover: true,
+      expiresAt: user.recoveryTokenExpires!,
+      message: 'Account can be recovered',
+    };
   }
 } 

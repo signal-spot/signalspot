@@ -39,6 +39,6 @@ export class UpdateSpotDto {
   @IsArray()
   @ArrayMaxSize(10, { message: 'Cannot have more than 10 tags' })
   @IsString({ each: true })
-  @Length(1, 30, { each: true, message: 'Each tag must be between 1 and 30 characters' })
+  @Length(1, 15, { each: true, message: 'Each tag must be between 1 and 15 characters' })
   tags?: string[];
 }

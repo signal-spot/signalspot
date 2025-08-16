@@ -13,17 +13,22 @@ import {
   HttpCode,
   HttpStatus,
   BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
-import { AuthGuard } from '@nestjs/passport';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { LoggerService } from '../common/services/logger.service';
+import { VerifiedUserGuard } from '../auth/guards/verified-user.guard';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiQuery, ApiConsumes } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiQuery, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { ProfileService } from './profile.service';
 import { GetUser } from '../auth/decorators/get-user.decorator';
 import { User, ProfileVisibility } from '../entities/user.entity';
 import { UpdateProfileDto, UpdateProfileSettingsDto, ProfileResponseDto } from './dto/profile-update.dto';
+import { ProfileSetupDto } from './dto/profile-setup.dto';
 import { SignatureConnectionPreferencesDto, ConnectionMatchDto, SignatureConnectionStatsDto } from './dto/signature-connection.dto';
 import { RateLimitGuard, RateLimit } from '../common/guards/rate-limit.guard';
 import { UploadService } from '../upload/upload.service';
+import { S3Service } from '../upload/s3.service';
 import { SignatureConnectionService } from './services/signature-connection.service';
 
 @ApiTags('Profile')
@@ -32,11 +37,13 @@ export class ProfileController {
   constructor(
     private readonly profileService: ProfileService,
     private readonly uploadService: UploadService,
+    private readonly s3Service: S3Service,
     private readonly signatureConnectionService: SignatureConnectionService,
+    private readonly logger: LoggerService,
   ) {}
 
   @Get('me')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(JwtAuthGuard, VerifiedUserGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current user profile' })
   @ApiResponse({
@@ -48,8 +55,56 @@ export class ProfileController {
     return this.profileService.getProfile(user.id);
   }
 
+  @Post('setup')
+  @UseGuards(JwtAuthGuard, VerifiedUserGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '초기 프로필 설정 (온보딩)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Profile setup completed successfully',
+    type: ProfileResponseDto,
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'Username already exists',
+  })
+  async setupProfile(
+    @GetUser() user: User,
+    @Body() setupDto: ProfileSetupDto,
+  ): Promise<{ success: boolean; data: ProfileResponseDto }> {
+    // 닉네임 중복 확인
+    if (setupDto.username) {
+      const exists = await this.profileService.checkUsernameExists(setupDto.username, user.id);
+      if (exists) {
+        throw new ConflictException('이미 사용 중인 닉네임입니다');
+      }
+    }
+
+    // 프로필 업데이트
+    const updatedProfile = await this.profileService.setupInitialProfile(user.id, setupDto);
+
+    return {
+      success: true,
+      data: updatedProfile,
+    };
+  }
+
+  @Get('check-username')
+  @ApiOperation({ summary: '닉네임 중복 확인' })
+  @ApiQuery({ name: 'username', required: true, description: 'Username to check' })
+  @ApiResponse({
+    status: 200,
+    description: 'Username availability checked',
+  })
+  async checkUsername(
+    @Query('username') username: string
+  ): Promise<{ available: boolean }> {
+    const exists = await this.profileService.checkUsernameExists(username);
+    return { available: !exists };
+  }
+
   @Get('analytics')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(JwtAuthGuard, VerifiedUserGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get profile analytics and statistics' })
   @ApiResponse({
@@ -61,7 +116,7 @@ export class ProfileController {
   }
 
   @Get('suggestions')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(JwtAuthGuard, VerifiedUserGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get profile connection suggestions' })
   @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Number of suggestions (max 20)' })
@@ -79,7 +134,7 @@ export class ProfileController {
   }
 
   @Put('me')
-  @UseGuards(AuthGuard('jwt'), RateLimitGuard)
+  @UseGuards(JwtAuthGuard, VerifiedUserGuard, RateLimitGuard)
   @RateLimit({ max: 10, windowMs: 60 * 1000 }) // 10 updates per minute
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
@@ -99,7 +154,7 @@ export class ProfileController {
   }
 
   @Put('settings')
-  @UseGuards(AuthGuard('jwt'), RateLimitGuard)
+  @UseGuards(JwtAuthGuard, VerifiedUserGuard, RateLimitGuard)
   @RateLimit({ max: 20, windowMs: 60 * 1000 }) // 20 settings updates per minute
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
@@ -117,7 +172,7 @@ export class ProfileController {
   }
 
   @Put('visibility/:visibility')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(JwtAuthGuard, VerifiedUserGuard)
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Update profile visibility' })
@@ -207,7 +262,7 @@ export class ProfileController {
   }
 
   @Post('avatar')
-  @UseGuards(AuthGuard('jwt'), RateLimitGuard)
+  @UseGuards(JwtAuthGuard, VerifiedUserGuard, RateLimitGuard)
   @RateLimit({ max: 3, windowMs: 60 * 1000 }) // 3 avatar uploads per minute
   @UseInterceptors(FileInterceptor('avatar', {
     limits: {
@@ -216,33 +271,69 @@ export class ProfileController {
   }))
   @ApiBearerAuth()
   @ApiConsumes('multipart/form-data')
-  @ApiOperation({ summary: 'Upload profile avatar' })
+  @ApiOperation({ 
+    summary: 'Upload profile avatar',
+    description: 'Upload a profile avatar image to S3. The image will be automatically resized to multiple dimensions (thumbnail: 150x150, medium: 400x400, large: 800x800).'
+  })
+  @ApiBody({
+    description: 'Avatar image file',
+    schema: {
+      type: 'object',
+      properties: {
+        avatar: {
+          type: 'string',
+          format: 'binary',
+          description: 'Image file (JPEG, PNG, WebP, GIF). Maximum size: 5MB'
+        }
+      },
+      required: ['avatar']
+    }
+  })
   @ApiResponse({
     status: 201,
-    description: 'Avatar uploaded and profile updated successfully',
+    description: 'Avatar uploaded to S3 and profile updated successfully. Returns the updated profile with the new avatar URL.',
     type: ProfileResponseDto,
   })
-  @ApiResponse({ status: 400, description: 'Invalid image file' })
-  @ApiResponse({ status: 429, description: 'Too many upload requests' })
+  @ApiResponse({ 
+    status: 400, 
+    description: 'Invalid or missing image file. Supported formats: JPEG, PNG, WebP, GIF' 
+  })
+  @ApiResponse({ 
+    status: 413, 
+    description: 'File size exceeds 5MB limit' 
+  })
+  @ApiResponse({ 
+    status: 429, 
+    description: 'Too many upload requests (max 3 per minute)' 
+  })
   async uploadAvatar(
     @GetUser() user: User,
     @UploadedFile() file: Express.Multer.File,
   ): Promise<ProfileResponseDto> {
+    this.logger.logWithUser('ProfileController.uploadAvatar called', user.id, 'ProfileController');
+    
     if (!file) {
       throw new BadRequestException('No avatar image provided');
     }
 
-    // Process the image
-    const processedImage = await this.uploadService.processProfileImage(file);
+    this.logger.debug(`File info - Name: ${file.originalname}, Type: ${file.mimetype}, Size: ${file.size} bytes`, 'ProfileController');
 
-    // Update user profile with new avatar URL
-    return this.profileService.updateProfile(user.id, {
+    // Upload image to S3
+    const processedImage = await this.s3Service.uploadProfileImage(file, user.id);
+    this.logger.debug('S3 upload completed', 'ProfileController');
+
+    // Update user profile with new avatar URL from S3
+    const updatedProfile = await this.profileService.updateProfile(user.id, {
       avatarUrl: processedImage.mediumUrl,
     });
+    
+    this.logger.debug('Profile updated successfully', 'ProfileController');
+    
+    return updatedProfile;
   }
 
   @Delete('avatar')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(JwtAuthGuard, VerifiedUserGuard)
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Remove profile avatar' })
@@ -252,27 +343,37 @@ export class ProfileController {
     type: ProfileResponseDto,
   })
   async removeAvatar(@GetUser() user: User): Promise<ProfileResponseDto> {
-    // Get current profile to extract avatar filename for deletion
+    // Get current profile to extract avatar URL for deletion
     const currentProfile = await this.profileService.getProfile(user.id);
     
     if (currentProfile.avatarUrl) {
-      const filename = this.uploadService.extractFilenameFromUrl(currentProfile.avatarUrl);
+      // Extract S3 key from the URL
+      // URL format: https://bucket.s3.region.amazonaws.com/signalspot/profiles/{userId}/{timestamp}_{fileId}_medium.jpg
+      const urlParts = currentProfile.avatarUrl.split('/');
+      const filename = urlParts[urlParts.length - 1]; // e.g., "timestamp_fileId_medium.jpg"
+      
       if (filename) {
-        // Extract base filename for deleting all sizes
-        const baseFilename = filename.replace(/(_thumb|_medium|_large)?\..*$/, '');
-        await this.uploadService.deleteProfileImageSet(baseFilename);
+        // Extract timestamp and fileId from filename
+        const matches = filename.match(/(\d+)_([a-f0-9-]+)_/);
+        if (matches && matches.length >= 3) {
+          const timestamp = matches[1];
+          const fileId = matches[2];
+          
+          // Delete all sizes from S3
+          await this.s3Service.deleteProfileImageSet(user.id, timestamp, fileId);
+        }
       }
     }
 
     // Update profile to remove avatar URL
     return this.profileService.updateProfile(user.id, {
-      avatarUrl: undefined,
+      avatarUrl: null,
     });
   }
 
   // Signature Connection Endpoints
   @Put('signature-connection/preferences')
-  @UseGuards(AuthGuard('jwt'), RateLimitGuard)
+  @UseGuards(JwtAuthGuard, VerifiedUserGuard, RateLimitGuard)
   @RateLimit({ max: 10, windowMs: 60 * 1000 }) // 10 updates per minute
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
@@ -291,8 +392,31 @@ export class ProfileController {
     return { message: 'Signature connection preferences updated successfully' };
   }
 
+  @Post('signature-connection/preferences')
+  @UseGuards(JwtAuthGuard, VerifiedUserGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '시그니처 커넥션 설정 (온보딩)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Signature connection preferences set successfully',
+  })
+  async setupSignatureConnection(
+    @GetUser() user: User,
+    @Body() preferencesDto: SignatureConnectionPreferencesDto,
+  ): Promise<{ success: boolean; message: string }> {
+    await this.signatureConnectionService.updateConnectionPreferences(user.id, preferencesDto);
+    
+    // 프로필 완성 상태 업데이트
+    await this.profileService.markProfileAsCompleted(user.id);
+
+    return {
+      success: true,
+      message: '시그니처 커넥션 설정이 완료되었습니다',
+    };
+  }
+
   @Get('signature-connection/preferences')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(JwtAuthGuard, VerifiedUserGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get signature connection preferences' })
   @ApiResponse({
@@ -308,7 +432,7 @@ export class ProfileController {
   }
 
   @Get('signature-connection/matches')
-  @UseGuards(AuthGuard('jwt'), RateLimitGuard)
+  @UseGuards(JwtAuthGuard, VerifiedUserGuard, RateLimitGuard)
   @RateLimit({ max: 20, windowMs: 60 * 1000 }) // 20 requests per minute
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Find signature connection matches' })
@@ -343,7 +467,7 @@ export class ProfileController {
   }
 
   @Get('signature-connection/stats')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(JwtAuthGuard, VerifiedUserGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get signature connection statistics' })
   @ApiResponse({

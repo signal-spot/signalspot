@@ -2,10 +2,12 @@ import {
   Controller,
   Post,
   Delete,
+  Get,
   UseGuards,
   UseInterceptors,
   UploadedFile,
   Param,
+  Query,
   HttpCode,
   HttpStatus,
   BadRequestException,
@@ -14,6 +16,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import { UploadService, ProcessedImage, UploadResult } from './upload.service';
+import { S3Service, S3ProcessedImage, S3UploadResult } from './s3.service';
 import { RateLimitGuard, RateLimit } from '../common/guards/rate-limit.guard';
 import { GetUser } from '../auth/decorators/get-user.decorator';
 import { User } from '../entities/user.entity';
@@ -21,7 +24,10 @@ import { User } from '../entities/user.entity';
 @ApiTags('Upload')
 @Controller('upload')
 export class UploadController {
-  constructor(private readonly uploadService: UploadService) {}
+  constructor(
+    private readonly uploadService: UploadService,
+    private readonly s3Service: S3Service,
+  ) {}
 
   @Post('profile-image')
   @UseGuards(AuthGuard('jwt'), RateLimitGuard)
@@ -60,12 +66,13 @@ export class UploadController {
   async uploadProfileImage(
     @GetUser() user: User,
     @UploadedFile() file: Express.Multer.File,
-  ): Promise<ProcessedImage> {
+  ): Promise<S3ProcessedImage> {
     if (!file) {
       throw new BadRequestException('No image file provided');
     }
 
-    return this.uploadService.processProfileImage(file);
+    // Use S3 service for profile image upload
+    return this.s3Service.uploadProfileImage(file, user.id);
   }
 
   @Post('file')
@@ -99,12 +106,13 @@ export class UploadController {
   async uploadFile(
     @GetUser() user: User,
     @UploadedFile() file: Express.Multer.File,
-  ): Promise<UploadResult> {
+  ): Promise<S3UploadResult> {
     if (!file) {
       throw new BadRequestException('No file provided');
     }
 
-    return this.uploadService.uploadFile(file);
+    // Use S3 service for file upload
+    return this.s3Service.uploadFile(file, 'general', user.id);
   }
 
   @Delete('file/:filename')
@@ -276,5 +284,64 @@ export class UploadController {
         generalFile: '10MB',
       },
     };
+  }
+
+  @Get('signed-url')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get pre-signed S3 upload URL' })
+  @ApiResponse({
+    status: 200,
+    description: 'Pre-signed upload URL generated',
+    schema: {
+      type: 'object',
+      properties: {
+        uploadUrl: { type: 'string' },
+        key: { type: 'string' },
+      },
+    },
+  })
+  async getSignedUploadUrl(
+    @GetUser() user: User,
+    @Query('fileName') fileName: string,
+    @Query('fileType') fileType: string,
+    @Query('folder') folder: string = 'temp',
+  ): Promise<{ uploadUrl: string; key: string }> {
+    if (!fileName || !fileType) {
+      throw new BadRequestException('fileName and fileType are required');
+    }
+
+    return this.s3Service.getSignedUploadUrl(
+      fileName,
+      fileType,
+      folder,
+      user.id,
+    );
+  }
+
+  @Post('s3/profile-image')
+  @UseGuards(AuthGuard('jwt'), RateLimitGuard)
+  @RateLimit({ max: 5, windowMs: 60 * 1000 })
+  @UseInterceptors(FileInterceptor('image', {
+    limits: {
+      fileSize: 5 * 1024 * 1024, // 5MB
+    },
+  }))
+  @ApiBearerAuth()
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Upload profile image to S3' })
+  @ApiResponse({
+    status: 201,
+    description: 'Profile image uploaded to S3 successfully',
+  })
+  async uploadProfileImageToS3(
+    @GetUser() user: User,
+    @UploadedFile() file: Express.Multer.File,
+  ): Promise<S3ProcessedImage> {
+    if (!file) {
+      throw new BadRequestException('No image file provided');
+    }
+
+    return this.s3Service.uploadProfileImage(file, user.id);
   }
 }

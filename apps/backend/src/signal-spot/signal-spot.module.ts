@@ -1,7 +1,10 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AuthModule } from '../auth/auth.module';
+import { WebSocketModule } from '../websocket/websocket.module';
+import { NotificationModule } from '../notifications/notification.module';
+import { ReportModule } from '../report/report.module';
 import { SignalSpot } from '../entities/signal-spot.entity';
 import { SignalSpotService } from './signal-spot.service';
 import { SignalSpotController } from './signal-spot.controller';
@@ -15,7 +18,10 @@ import { Location } from '../entities/location.entity';
   imports: [
     MikroOrmModule.forFeature([SignalSpot, User, Location]),
     ScheduleModule.forRoot(),
-    AuthModule
+    AuthModule,
+    WebSocketModule,
+    forwardRef(() => NotificationModule),
+    ReportModule
   ],
   providers: [
     SignalSpotService,

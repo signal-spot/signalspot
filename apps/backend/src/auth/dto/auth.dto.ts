@@ -1,4 +1,4 @@
-import { IsEmail, IsString, MinLength, MaxLength, Matches } from 'class-validator';
+import { IsEmail, IsString, MinLength, MaxLength, Matches, IsOptional } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class RegisterDto {
@@ -14,11 +14,8 @@ export class RegisterDto {
     description: 'Username (3-30 characters, letters, numbers, underscore, hyphen only)' 
   })
   @IsString({ message: 'Username must be a string' })
-  @MinLength(3, { message: 'Username must be at least 3 characters long' })
+  @MinLength(2, { message: 'Username must be at least 2 characters long' })
   @MaxLength(30, { message: 'Username must be less than 30 characters' })
-  @Matches(/^[a-zA-Z0-9_-]+$/, { 
-    message: 'Username can only contain letters, numbers, underscores, and hyphens' 
-  })
   username: string;
 
   @ApiProperty({ 
@@ -49,6 +46,25 @@ export class LoginDto {
   @IsString({ message: 'Password must be a string' })
   @MinLength(1, { message: 'Password is required' })
   password: string;
+
+  @ApiProperty({ 
+    example: 'fcm_token_string',
+    description: 'FCM or APNs token for push notifications',
+    required: false
+  })
+  @IsString({ message: 'Device token must be a string' })
+  @IsOptional()
+  deviceToken?: string;
+
+  @ApiProperty({ 
+    example: 'fcm',
+    description: 'Platform type (fcm for Android, apns for iOS)',
+    required: false,
+    enum: ['fcm', 'apns']
+  })
+  @IsString({ message: 'Platform must be a string' })
+  @IsOptional()
+  platform?: 'fcm' | 'apns';
 }
 
 export class RefreshTokenDto {
