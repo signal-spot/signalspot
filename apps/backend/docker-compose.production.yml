@@ -9,7 +9,7 @@ services:
     env_file:
       - .env.production
     ports:
-      - "${DB_PORT:-5432}:5432"
+      - "0.0.0.0:${DB_PORT:-5432}:5432"
     environment:
       POSTGRES_DB: ${DB_DATABASE:-${DB_NAME}}
       POSTGRES_USER: ${DB_USERNAME}
