@@ -13,13 +13,24 @@ import { ChatRoom } from '../entities/chat-room.entity';
 import { Message } from '../entities/message.entity';
 import { BlockedUser } from '../entities/blocked-user.entity';
 import { Report } from '../entities/report.entity';
+import * as dotenv from 'dotenv';
+import * as path from 'path';
+
+// Load environment variables based on NODE_ENV
+const nodeEnv = process.env.NODE_ENV || 'development';
+const envFile = nodeEnv === 'production' ? '.env.production' : '.env.development';
+const envPath = path.resolve(__dirname, '../../', envFile);
+dotenv.config({ path: envPath });
+
+console.log(`[Database Config] Loading environment: ${nodeEnv} from ${envPath}`);
+console.log(`[Database Config] DB_USERNAME: ${process.env.DB_USERNAME}`);
+console.log(`[Database Config] DB_PASSWORD: ${process.env.DB_PASSWORD ? '***' : 'undefined'}`);
 
 export const databaseConfig: Options = {
   driver: PostgreSqlDriver,
   host: process.env.DB_HOST || 'localhost',
   port: parseInt(process.env.DB_PORT) || 5432,
-  // Production에서는 signalspot_prod를, Development에서는 postgres를 기본값으로 사용
-  user: process.env.DB_USERNAME || (process.env.NODE_ENV === 'production' ? 'signalspot_prod' : 'postgres'),
+  user: process.env.DB_USERNAME || 'postgres',
   password: process.env.DB_PASSWORD || 'postgres',
   dbName: process.env.DB_DATABASE || process.env.DB_NAME || 'signalspot',
   entities: [User, Location, SignalSpot, Spark, LocationHistory, SacredSite, SiteActivity, Notification, ChatRoom, Message, Comment, BlockedUser, Report],
