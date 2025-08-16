@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'firebase_options.dart';
 // Google Maps 사용 (네이티브 플러그인)
@@ -11,6 +12,10 @@ import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/services/firebase_auth_service.dart';
 import 'core/services/push_notification_service.dart';
+import 'core/services/analytics_service.dart';
+
+// Global Firebase Analytics instance
+late final FirebaseAnalytics analytics;
 
 void main() async {
   WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
@@ -43,6 +48,14 @@ void main() async {
     final pushService = PushNotificationService();
     await pushService.initialize();
     print('✓ Push Notification service initialized');
+    
+    // Firebase Analytics 초기화
+    analytics = FirebaseAnalytics.instance;
+    await analytics.setAnalyticsCollectionEnabled(true);
+    
+    // Analytics 서비스 초기화
+    await AnalyticsService.initialize(analytics);
+    print('✓ Firebase Analytics initialized');
   } catch (e, stackTrace) {
     print('❌ Firebase initialization failed: $e');
     print('Stack trace: $stackTrace');

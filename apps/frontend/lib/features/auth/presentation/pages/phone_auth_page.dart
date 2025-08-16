@@ -8,6 +8,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/services/firebase_auth_service.dart';
+import '../../../../core/services/analytics_service.dart';
 
 class PhoneAuthPage extends ConsumerStatefulWidget {
   const PhoneAuthPage({super.key});
@@ -124,6 +125,12 @@ class _PhoneAuthPageState extends ConsumerState<PhoneAuthPage>
     }
 
     setState(() => _isLoading = true);
+    
+    // Analytics: 전화번호 인증 시작 이벤트
+    await AnalyticsService.logEvent(
+      name: 'phone_auth_started',
+      parameters: {'country_code': _countryCode},
+    );
 
     try {
       HapticFeedback.mediumImpact();

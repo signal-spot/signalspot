@@ -31,7 +31,7 @@ export class Comment extends BaseEntity {
     type: 'jsonb', 
     default: '[]',
     serializer: (value: string[]) => JSON.stringify(value || []),
-    hydrator: (value: string | string[]) => {
+    hydrate: (value: string | string[]) => {
       if (typeof value === 'string') {
         try {
           return JSON.parse(value);

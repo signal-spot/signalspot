@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import '../../core/api/api_client.dart';
+import '../../core/services/analytics_service.dart';
 import '../models/index.dart';
 
 class SignalService {
@@ -433,7 +434,17 @@ class SignalService {
         data: request.toJson(),
       );
       
-      return SignalSpot.fromJson(response.data['data']);
+      final spot = SignalSpot.fromJson(response.data['data']);
+      
+      // Analytics: Signal Spot 생성 이벤트
+      await AnalyticsService.logSignalSpotCreated(
+        spotId: spot.id,
+        latitude: spot.latitude,
+        longitude: spot.longitude,
+        message: spot.message,
+      );
+      
+      return spot;
     } catch (e) {
       throw _handleError(e);
     }

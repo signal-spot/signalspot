@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:firebase_analytics/firebase_analytics.dart';
 import '../../features/auth/presentation/pages/login_page.dart';
 import '../../features/auth/presentation/pages/register_page.dart';
 import '../../features/auth/presentation/pages/auth_choice_page.dart';
@@ -29,6 +30,7 @@ import '../../features/notifications/presentation/pages/notification_settings_pa
 import '../../features/notifications/presentation/pages/notifications_page.dart';
 import '../../features/help/presentation/pages/help_insights_page.dart';
 import '../services/firebase_auth_service.dart';
+import '../services/analytics_service.dart';
 
 // Create a custom ChangeNotifier that listens to auth state changes
 class AuthNotifier extends ChangeNotifier {
@@ -61,6 +63,7 @@ final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: '/splash',
     refreshListenable: authNotifier,
+    observers: [AnalyticsService.observer],
     redirect: (context, state) {
       // 매번 최신 authState를 읽음
       final currentAuthState = ref.read(authProvider);

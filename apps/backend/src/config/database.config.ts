@@ -1,6 +1,7 @@
 import { registerAs } from '@nestjs/config';
 import { MikroOrmModuleOptions } from '@mikro-orm/nestjs';
 import { PostgreSqlDriver } from '@mikro-orm/postgresql';
+import { UnderscoreNamingStrategy } from '@mikro-orm/core';
 
 /**
  * Database configuration with proper environment variable handling
@@ -84,6 +85,6 @@ export default registerAs('database', (): MikroOrmModuleOptions => {
     strict: true,
     
     // Naming strategy
-    namingStrategy: 'UnderscoreNamingStrategy',
+    namingStrategy: UnderscoreNamingStrategy,
   };
 });

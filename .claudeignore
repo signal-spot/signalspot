@@ -1,0 +1,14 @@
+# Ignore frontend directory
+apps/frontend/
+
+# Ignore other unnecessary directories
+node_modules/
+dist/
+build/
+.git/
+coverage/
+*.log
+.DS_Store
+
+# Keep only backend
+!apps/backend/

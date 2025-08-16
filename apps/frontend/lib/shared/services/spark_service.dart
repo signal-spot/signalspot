@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import '../../core/api/api_client.dart';
+import '../../core/services/analytics_service.dart';
 import '../models/index.dart';
 
 class SparkService {
@@ -104,6 +105,13 @@ class SparkService {
           locationName = '근처 위치';
         }
         
+        // Analytics: 스파크 전송 이벤트
+        await AnalyticsService.logSparkSent(
+          sparkId: sparkData['id'],
+          receiverId: request.targetUserId,
+          message: request.message,
+        );
+        
         return SparkResponse(
           success: true,
           data: Spark(
@@ -178,6 +186,9 @@ class SparkService {
       // 백엔드가 {success: true, data: spark} 형태로 응답
       if (response.data is Map && response.data['success'] == true) {
         final sparkData = response.data['data'];
+        
+        // Analytics: 스파크 수락 이벤트
+        await AnalyticsService.logSparkAccepted(sparkId: sparkId);
         
         // Spark 객체로 변환
         final Map<String, dynamic> sparkJson = Map<String, dynamic>.from(sparkData);

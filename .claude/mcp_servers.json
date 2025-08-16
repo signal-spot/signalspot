@@ -18,9 +18,9 @@
       "command": "npx",
       "args": [
         "-y",
-        "@modelcontextprotocol/server-filesystem"
-      ],
-      "args2": ["/Users/gimjunhyeong/Develop/signalspot"]
+        "@modelcontextprotocol/server-filesystem",
+        "/Users/gimjunhyeong/Develop/signalspot/apps/backend"
+      ]
     }
   }
 }

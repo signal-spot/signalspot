@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { AppWebSocketGateway } from './websocket.gateway';
 import { SignalSpot } from '../entities/signal-spot.entity';
 import { User } from '../entities/user.entity';
-import { Message } from '../chat/entities/message.entity';
+import { Message } from '../entities/message.entity';
 import { Spark } from '../spark/entities/spark.entity';
 
 export enum WebSocketEvent {
@@ -65,13 +65,13 @@ export class WebSocketService {
     const data = {
       id: spot.id,
       title: spot.title,
-      content: spot.content,
+      content: spot.message,
       latitude: spot.latitude,
       longitude: spot.longitude,
       creator: {
         id: spot.creator.id,
-        username: spot.creator.username,
-        avatarUrl: spot.creator.avatarUrl,
+        username: (spot.creator as any).username || 'Unknown',
+        avatarUrl: (spot.creator as any).avatarUrl || null,
       },
       createdAt: spot.createdAt,
       expiresAt: spot.expiresAt,
@@ -94,7 +94,7 @@ export class WebSocketService {
     const data = {
       id: spot.id,
       title: spot.title,
-      content: spot.content,
+      content: spot.message,
       updatedAt: spot.updatedAt,
       likeCount: spot.likeCount,
       replyCount: spot.replyCount,
@@ -128,8 +128,9 @@ export class WebSocketService {
     this.gateway.emitToSpot(spot.id, WebSocketEvent.SPOT_LIKED, data);
     
     // Notify the spot creator
-    if (spot.creator.id !== user.id) {
-      this.sendNotificationToUser(spot.creator.id, {
+    const creatorId = typeof spot.creator === 'string' ? spot.creator : spot.creator.id;
+    if (creatorId !== user.id) {
+      this.sendNotificationToUser(creatorId, {
         id: `like_${spot.id}_${user.id}_${Date.now()}`,
         type: 'spot_liked',
         title: 'Your Signal Spot was liked!',
@@ -164,8 +165,9 @@ export class WebSocketService {
     this.gateway.emitToSpot(spot.id, WebSocketEvent.SPOT_COMMENTED, data);
     
     // Notify the spot creator
-    if (spot.creator.id !== user.id) {
-      this.sendNotificationToUser(spot.creator.id, {
+    const creatorId = typeof spot.creator === 'string' ? spot.creator : spot.creator.id;
+    if (creatorId !== user.id) {
+      this.sendNotificationToUser(creatorId, {
         id: `comment_${spot.id}_${comment.id}_${Date.now()}`,
         type: 'spot_commented',
         title: 'New comment on your Signal Spot',
@@ -206,9 +208,9 @@ export class WebSocketService {
       id: message.id,
       content: message.content,
       sender: {
-        id: message.sender.id,
-        username: message.sender.username,
-        avatarUrl: message.sender.avatarUrl,
+        id: typeof message.sender === 'string' ? message.sender : message.sender.id,
+        username: (message.sender as any).username || 'Unknown',
+        avatarUrl: (message.sender as any).avatarUrl || null,
       },
       roomId,
       createdAt: message.createdAt,
@@ -229,30 +231,33 @@ export class WebSocketService {
       sparkId: chatRoom.sparkId,
       initiatedBy: chatRoom.initiatedBy,
       participant1: {
-        id: chatRoom.participant1.id,
-        username: chatRoom.participant1.username,
-        avatarUrl: chatRoom.participant1.avatarUrl,
+        id: typeof chatRoom.participant1 === 'string' ? chatRoom.participant1 : chatRoom.participant1.id,
+        username: (chatRoom.participant1 as any).username || 'Unknown',
+        avatarUrl: (chatRoom.participant1 as any).avatarUrl || null,
       },
       participant2: {
-        id: chatRoom.participant2.id,
-        username: chatRoom.participant2.username,
-        avatarUrl: chatRoom.participant2.avatarUrl,
+        id: typeof chatRoom.participant2 === 'string' ? chatRoom.participant2 : chatRoom.participant2.id,
+        username: (chatRoom.participant2 as any).username || 'Unknown',
+        avatarUrl: (chatRoom.participant2 as any).avatarUrl || null,
       },
       createdAt: chatRoom.createdAt,
     };
 
     // 양쪽 참가자에게 알림
-    await this.sendNotificationToUser(chatRoom.participant1.id, {
+    const participant1Id = typeof chatRoom.participant1 === 'string' ? chatRoom.participant1 : chatRoom.participant1.id;
+    const participant2Id = typeof chatRoom.participant2 === 'string' ? chatRoom.participant2 : chatRoom.participant2.id;
+    
+    await this.sendNotificationToUser(participant1Id, {
       type: WebSocketEvent.CHAT_ROOM_CREATED,
       data,
-      message: `${chatRoom.participant2.username}님과의 채팅방이 생성되었습니다.`,
+      message: `${(chatRoom.participant2 as any).username || 'Someone'}님과의 채팅방이 생성되었습니다.`,
       createdAt: new Date(),
     });
 
-    await this.sendNotificationToUser(chatRoom.participant2.id, {
+    await this.sendNotificationToUser(participant2Id, {
       type: WebSocketEvent.CHAT_ROOM_CREATED,
       data,
-      message: `${chatRoom.participant1.username}님과의 채팅방이 생성되었습니다.`,
+      message: `${(chatRoom.participant1 as any).username || 'Someone'}님과의 채팅방이 생성되었습니다.`,
       createdAt: new Date(),
     });
 
@@ -278,8 +283,8 @@ export class WebSocketService {
     const senderData = {
       sparkId: spark.id,
       receiver: {
-        id: spark.receiver.id,
-        username: spark.receiver.username,
+        id: typeof spark.receiver === 'string' ? spark.receiver : spark.receiver.id,
+        username: (spark.receiver as any).username || 'Unknown',
       },
       message: spark.message,
       expiresAt: spark.expiresAt,
@@ -287,14 +292,15 @@ export class WebSocketService {
     };
 
     // Notify sender
-    this.gateway.emitToUser(spark.sender.id, WebSocketEvent.SPARK_SENT, senderData);
+    const senderId = typeof spark.sender === 'string' ? spark.sender : spark.sender.id;
+    this.gateway.emitToUser(senderId, WebSocketEvent.SPARK_SENT, senderData);
 
     const receiverData = {
       sparkId: spark.id,
       sender: {
-        id: spark.sender.id,
-        username: spark.sender.username,
-        avatarUrl: spark.sender.avatarUrl,
+        id: typeof spark.sender === 'string' ? spark.sender : spark.sender.id,
+        username: (spark.sender as any).username || 'Unknown',
+        avatarUrl: (spark.sender as any).avatarUrl || null,
       },
       message: spark.message,
       expiresAt: spark.expiresAt,
@@ -302,15 +308,16 @@ export class WebSocketService {
     };
 
     // Notify receiver
-    this.gateway.emitToUser(spark.receiver.id, WebSocketEvent.SPARK_RECEIVED, receiverData);
+    const receiverId = typeof spark.receiver === 'string' ? spark.receiver : spark.receiver.id;
+    this.gateway.emitToUser(receiverId, WebSocketEvent.SPARK_RECEIVED, receiverData);
 
     // Send push notification to receiver
-    this.sendNotificationToUser(spark.receiver.id, {
+    this.sendNotificationToUser(receiverId, {
       id: `spark_${spark.id}_${Date.now()}`,
       type: 'spark_received',
       title: '✨ New Spark!',
-      message: `${spark.sender.username} sent you a spark`,
-      data: { sparkId: spark.id, senderId: spark.sender.id },
+      message: `${(spark.sender as any).username || 'Someone'} sent you a spark`,
+      data: { sparkId: spark.id, senderId: senderId },
       timestamp: new Date(),
       priority: 'high',
     });
