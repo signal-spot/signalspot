@@ -34,7 +34,9 @@ import { CacheInterceptor } from '../common/interceptors/cache.interceptor';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: ['.env.development', '.env.local', '.env'],
+      envFilePath: process.env.NODE_ENV === 'production' 
+        ? ['.env.production', '.env']
+        : ['.env.development', '.env.local', '.env'],
       load: [firebaseConfig],
     }),
     MikroOrmModule.forRoot(databaseConfig),

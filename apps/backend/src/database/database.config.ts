@@ -20,7 +20,7 @@ export const databaseConfig: Options = {
   port: parseInt(process.env.DB_PORT) || 5432,
   user: process.env.DB_USERNAME || 'postgres',
   password: process.env.DB_PASSWORD || 'postgres',
-  dbName: process.env.DB_DATABASE || 'signalspot',
+  dbName: process.env.DB_DATABASE || process.env.DB_NAME || 'signalspot',
   entities: [User, Location, SignalSpot, Spark, LocationHistory, SacredSite, SiteActivity, Notification, ChatRoom, Message, Comment, BlockedUser, Report],
   debug: process.env.NODE_ENV !== 'production',
   // Auto-sync schema in development (creates missing tables)

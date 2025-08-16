@@ -65,12 +65,12 @@ fi
 
 # Build NestJS application
 echo "🔨 Building NestJS application..."
-npm run build
+NODE_ENV=production npm run build
 
 # Start application with PM2
 echo "🚀 Starting NestJS application with PM2..."
 pm2 delete signalspot-api 2>/dev/null || true
-pm2 start ecosystem.config.js --env production
+NODE_ENV=production pm2 start ecosystem.config.js --env production
 
 # Show status
 echo ""

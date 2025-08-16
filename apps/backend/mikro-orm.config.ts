@@ -15,9 +15,14 @@ import { Report } from './src/entities/report.entity';
 import { Comment } from './src/entities/comment.entity';
 import * as dotenv from 'dotenv';
 
-// Load environment variables
-dotenv.config({ path: '.env.development' });
-dotenv.config({ path: '.env' });
+// Load environment variables based on NODE_ENV
+const nodeEnv = process.env.NODE_ENV || 'development';
+const envFile = nodeEnv === 'production' ? '.env.production' : '.env.development';
+
+// Load the appropriate environment file
+dotenv.config({ path: envFile });
+
+console.log(`[MikroORM] Loading environment: ${nodeEnv} from ${envFile}`);
 
 export default defineConfig({
   driver: PostgreSqlDriver,
@@ -25,7 +30,7 @@ export default defineConfig({
   port: parseInt(process.env.DB_PORT) || 5432,
   user: process.env.DB_USERNAME || 'postgres',
   password: process.env.DB_PASSWORD || 'postgres',
-  dbName: process.env.DB_DATABASE || 'signalspot',
+  dbName: process.env.DB_DATABASE || process.env.DB_NAME || 'signalspot',
   entities: [User, Location, SignalSpot, Spark, LocationHistory, SacredSite, SiteActivity, Notification, ChatRoom, Message, BlockedUser, Report, Comment],
   debug: process.env.NODE_ENV !== 'production',
   // PostgreSQL 타임존 설정
