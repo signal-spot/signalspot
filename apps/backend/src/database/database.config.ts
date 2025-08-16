@@ -18,7 +18,8 @@ export const databaseConfig: Options = {
   driver: PostgreSqlDriver,
   host: process.env.DB_HOST || 'localhost',
   port: parseInt(process.env.DB_PORT) || 5432,
-  user: process.env.DB_USERNAME || 'postgres',
+  // Production에서는 signalspot_prod를, Development에서는 postgres를 기본값으로 사용
+  user: process.env.DB_USERNAME || (process.env.NODE_ENV === 'production' ? 'signalspot_prod' : 'postgres'),
   password: process.env.DB_PASSWORD || 'postgres',
   dbName: process.env.DB_DATABASE || process.env.DB_NAME || 'signalspot',
   entities: [User, Location, SignalSpot, Spark, LocationHistory, SacredSite, SiteActivity, Notification, ChatRoom, Message, Comment, BlockedUser, Report],
@@ -50,7 +51,7 @@ export const databaseConfig: Options = {
   // 시간대 설정 추가
   timezone: '+09:00',
   forceUtcTimezone: false,
-}; 
+};; 
 // PostgreSQL 타임존 설정을 위한 afterConnect 추가
 if (!databaseConfig.pool) {
   databaseConfig.pool = {};

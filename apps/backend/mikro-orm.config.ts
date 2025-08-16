@@ -19,10 +19,13 @@ import * as dotenv from 'dotenv';
 const nodeEnv = process.env.NODE_ENV || 'development';
 const envFile = nodeEnv === 'production' ? '.env.production' : '.env.development';
 
-// Load the appropriate environment file
-dotenv.config({ path: envFile });
+// Load the appropriate environment file with correct path resolution
+const path = require('path');
+const envPath = path.resolve(__dirname, envFile);
+dotenv.config({ path: envPath });
 
-console.log(`[MikroORM] Loading environment: ${nodeEnv} from ${envFile}`);
+console.log(`[MikroORM] Loading environment: ${nodeEnv} from ${envPath}`);
+console.log(`[MikroORM] DB_USERNAME: ${process.env.DB_USERNAME}`);
 
 export default defineConfig({
   driver: PostgreSqlDriver,
