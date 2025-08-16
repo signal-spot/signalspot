@@ -86,14 +86,16 @@ class AnalyticsService {
     if (_analytics == null) return;
     
     try {
+      final Map<String, Object> params = {
+        'spot_id': spotId,
+        'latitude': latitude,
+        'longitude': longitude,
+        if (message != null) 'has_message': true,
+      };
+      
       await _analytics!.logEvent(
         name: 'signal_spot_created',
-        parameters: {
-          'spot_id': spotId,
-          'latitude': latitude,
-          'longitude': longitude,
-          if (message != null) 'has_message': true,
-        },
+        parameters: params,
       );
     } catch (e) {
       debugPrint('Failed to log signal spot created: $e');
@@ -107,12 +109,14 @@ class AnalyticsService {
     if (_analytics == null) return;
     
     try {
+      final Map<String, Object> params = {
+        'spot_id': spotId,
+        'view_source': viewSource, // 'map', 'list', 'search', etc.
+      };
+      
       await _analytics!.logEvent(
         name: 'signal_spot_viewed',
-        parameters: {
-          'spot_id': spotId,
-          'view_source': viewSource, // 'map', 'list', 'search', etc.
-        },
+        parameters: params,
       );
     } catch (e) {
       debugPrint('Failed to log signal spot viewed: $e');
@@ -126,11 +130,13 @@ class AnalyticsService {
     if (_analytics == null) return;
     
     try {
+      final Map<String, Object> params = {
+        'spot_id': spotId,
+      };
+      
       await _analytics!.logEvent(
         name: isLiked ? 'signal_spot_liked' : 'signal_spot_unliked',
-        parameters: {
-          'spot_id': spotId,
-        },
+        parameters: params,
       );
     } catch (e) {
       debugPrint('Failed to log signal spot like: $e');
@@ -146,13 +152,15 @@ class AnalyticsService {
     if (_analytics == null) return;
     
     try {
+      final Map<String, Object> params = {
+        'spark_id': sparkId,
+        'receiver_id': receiverId,
+        'has_message': message != null,
+      };
+      
       await _analytics!.logEvent(
         name: 'spark_sent',
-        parameters: {
-          'spark_id': sparkId,
-          'receiver_id': receiverId,
-          'has_message': message != null,
-        },
+        parameters: params,
       );
     } catch (e) {
       debugPrint('Failed to log spark sent: $e');
@@ -166,12 +174,14 @@ class AnalyticsService {
     if (_analytics == null) return;
     
     try {
+      final Map<String, Object> params = {
+        'spark_id': sparkId,
+        'sender_id': senderId,
+      };
+      
       await _analytics!.logEvent(
         name: 'spark_received',
-        parameters: {
-          'spark_id': sparkId,
-          'sender_id': senderId,
-        },
+        parameters: params,
       );
     } catch (e) {
       debugPrint('Failed to log spark received: $e');
@@ -184,11 +194,13 @@ class AnalyticsService {
     if (_analytics == null) return;
     
     try {
+      final Map<String, Object> params = {
+        'spark_id': sparkId,
+      };
+      
       await _analytics!.logEvent(
         name: 'spark_accepted',
-        parameters: {
-          'spark_id': sparkId,
-        },
+        parameters: params,
       );
     } catch (e) {
       debugPrint('Failed to log spark accepted: $e');
@@ -201,11 +213,13 @@ class AnalyticsService {
     if (_analytics == null) return;
     
     try {
+      final Map<String, Object> params = {
+        'spark_id': sparkId,
+      };
+      
       await _analytics!.logEvent(
         name: 'spark_rejected',
-        parameters: {
-          'spark_id': sparkId,
-        },
+        parameters: params,
       );
     } catch (e) {
       debugPrint('Failed to log spark rejected: $e');
@@ -274,11 +288,13 @@ class AnalyticsService {
     if (_analytics == null) return;
     
     try {
+      final Map<String, Object> params = {
+        'completion_percentage': completionPercentage,
+      };
+      
       await _analytics!.logEvent(
         name: 'profile_completed',
-        parameters: {
-          'completion_percentage': completionPercentage,
-        },
+        parameters: params,
       );
     } catch (e) {
       debugPrint('Failed to log profile completed: $e');
@@ -313,9 +329,13 @@ class AnalyticsService {
     
     try {
       // Convert Map<String, dynamic> to Map<String, Object>
-      final Map<String, Object>? convertedParams = parameters?.map(
-        (key, value) => MapEntry(key, value as Object),
-      );
+      // Filter out null values
+      final Map<String, Object>? convertedParams = parameters?.entries
+        .where((entry) => entry.value != null)
+        .fold<Map<String, Object>>({}, (map, entry) {
+          map[entry.key] = entry.value as Object;
+          return map;
+        });
       
       await _analytics!.logEvent(
         name: name,
