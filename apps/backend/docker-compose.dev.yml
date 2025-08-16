@@ -4,18 +4,18 @@ services:
   # Development backend with hot reload
   backend:
     build:
-      context: .
+      context: ../..
       dockerfile: apps/backend/Dockerfile.dev
       target: development
     environment:
       NODE_ENV: development
       MIKRO_ORM_CLI_USE_TS_NODE: "true"
-      MIKRO_ORM_CLI_CONFIG: ./src/database/mikro-orm.config.ts
+      MIKRO_ORM_CLI_CONFIG: ./apps/backend/src/database/mikro-orm.config.ts
     volumes:
-      - ./apps/backend/src:/app/apps/backend/src
-      - ./shared:/app/shared
+      - ./src:/app/apps/backend/src
+      - ../../shared:/app/shared
       - /app/node_modules
-      - /app/apps/backend/node_modules
+      - ./node_modules:/app/apps/backend/node_modules
     command: npm run start:dev backend
     ports:
       - "3000:3000"
@@ -24,7 +24,7 @@ services:
   # React Native Metro Bundler for mobile development
   metro:
     build:
-      context: .
+      context: ../..
       dockerfile: apps/frontend/Dockerfile.dev
       target: development
     profiles: []  # Always run in dev mode
@@ -33,8 +33,8 @@ services:
       REACT_NATIVE_PACKAGER_HOSTNAME: 0.0.0.0
       METRO_CACHE_DIR: /app/node_modules/.cache/metro
     volumes:
-      - ./apps/frontend:/app/apps/frontend
-      - ./shared:/app/shared
+      - ../frontend:/app/apps/frontend
+      - ../../shared:/app/shared
       - metro_dev_cache:/app/node_modules/.cache
     ports:
       - "8081:8081"  # Metro bundler port
@@ -52,7 +52,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres_dev_data:/var/lib/postgresql/data
-      - ./scripts/dev-seed.sql:/docker-entrypoint-initdb.d/dev-seed.sql
+      - ../../scripts/dev-seed.sql:/docker-entrypoint-initdb.d/dev-seed.sql
 
   # Redis with development settings
   redis:

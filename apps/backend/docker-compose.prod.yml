@@ -13,7 +13,7 @@ services:
       PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      - ../../scripts/init-db.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
     ports:
       - "${DB_PORT:-5432}:5432"
     networks:
@@ -68,13 +68,13 @@ services:
   # NestJS Backend
   backend:
     build:
-      context: .
+      context: ../..
       dockerfile: apps/backend/Dockerfile
       target: production
     container_name: signalspot-backend
     restart: unless-stopped
     env_file:
-      - apps/backend/.env
+      - ./.env
     environment:
       NODE_ENV: production
       DB_HOST: postgres
@@ -89,8 +89,8 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./apps/backend/uploads:/app/uploads
-      - ./apps/backend/logs:/app/logs
+      - ./uploads:/app/uploads
+      - ./logs:/app/logs
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (r) => {r.statusCode === 200 ? process.exit(0) : process.exit(1)})"]
       interval: 30s
@@ -122,9 +122,9 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/conf.d:/etc/nginx/conf.d:ro
-      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ../../nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ../../nginx/conf.d:/etc/nginx/conf.d:ro
+      - ../../nginx/ssl:/etc/nginx/ssl:ro
       - nginx_cache:/var/cache/nginx
       - nginx_logs:/var/log/nginx
     networks:
@@ -151,7 +151,7 @@ services:
     container_name: signalspot-prometheus
     restart: unless-stopped
     volumes:
-      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../../monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
@@ -180,7 +180,7 @@ services:
       GF_INSTALL_PLUGINS: redis-datasource
     volumes:
       - grafana_data:/var/lib/grafana
-      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../../monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
     ports:
       - "3001:3000"
     networks:
@@ -204,8 +204,8 @@ services:
       POSTGRES_USER: ${DB_USERNAME:-signalspot_user}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
-      - ./backups:/backups
-      - ./scripts/backup.sh:/backup.sh:ro
+      - ../../backups:/backups
+      - ../../scripts/backup.sh:/backup.sh:ro
     networks:
       - signalspot-network
     depends_on:
