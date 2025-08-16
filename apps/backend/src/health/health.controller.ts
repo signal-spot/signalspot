@@ -5,6 +5,7 @@ import {
   TypeOrmHealthIndicator,
   MemoryHealthIndicator,
   DiskHealthIndicator,
+  HealthIndicatorResult,
 } from '@nestjs/terminus';
 import { ConfigService } from '@nestjs/config';
 import { RedisCacheService } from '../common/cache/redis-cache.service';
@@ -113,7 +114,7 @@ export class HealthController {
   /**
    * Check Redis health
    */
-  private async checkRedis() {
+  private async checkRedis(): Promise<HealthIndicatorResult> {
     try {
       const testKey = 'health:check';
       const testValue = Date.now().toString();
@@ -132,14 +133,14 @@ export class HealthController {
         redis: {
           status: 'up',
         },
-      };
+      } as HealthIndicatorResult;
     } catch (error) {
       return {
         redis: {
           status: 'down',
           message: error.message,
         },
-      };
+      } as HealthIndicatorResult;
     }
   }
 }

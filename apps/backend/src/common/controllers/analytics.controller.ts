@@ -68,7 +68,7 @@ export class AnalyticsController {
   ): Promise<AnalyticsMetrics> {
     this.logger.log(`Analytics metrics request for ${timeframe}`);
     try {
-      return await this.analyticsService.getAnalyticsMetrics(timeframe, startDate, endDate);
+      return await this.analyticsService.getAnalyticsMetrics(timeframe, startDate ? new Date(startDate) : undefined, endDate ? new Date(endDate) : undefined);
     } catch (error) {
       this.logger.error(`Error getting analytics metrics: ${error.message}`);
       throw new HttpException('Failed to get analytics metrics', HttpStatus.INTERNAL_SERVER_ERROR);
@@ -89,7 +89,7 @@ export class AnalyticsController {
     this.logger.log(`Analytics report request for ${reportType}`);
     
     try {
-      return await this.analyticsService.generateReport(reportType, startDate, endDate);
+      return await this.analyticsService.generateReport(reportType, startDate ? new Date(startDate) : undefined, endDate ? new Date(endDate) : undefined);
     } catch (error) {
       this.logger.error(`Error generating analytics report: ${error.message}`);
       throw new HttpException('Failed to generate analytics report', HttpStatus.INTERNAL_SERVER_ERROR);
@@ -210,8 +210,8 @@ export class AnalyticsController {
       const exportData = await this.analyticsService.exportAnalyticsData(
         format,
         timeframe,
-        startDate,
-        endDate
+        startDate ? new Date(startDate) : undefined,
+        endDate ? new Date(endDate) : undefined
       );
       
       res.setHeader('Content-Type', exportData.mimeType);

@@ -941,8 +941,8 @@ export class SignalSpot extends AggregateRoot {
     return {
       id: this.id,
       creatorId: creatorEntity?.id,
-      creatorUsername: creatorEntity?.username, // 추가: creator의 username 포함
-      creatorAvatar: creatorEntity?.avatarUrl, // 추가: creator의 avatarUrl 포함
+      creatorUsername: creatorEntity && 'username' in creatorEntity ? creatorEntity.username : undefined, // 추가: creator의 username 포함
+      creatorAvatar: creatorEntity && 'avatarUrl' in creatorEntity ? creatorEntity.avatarUrl : undefined, // 추가: creator의 avatarUrl 포함
       message: this.message,
       title: this.title,
       location: {

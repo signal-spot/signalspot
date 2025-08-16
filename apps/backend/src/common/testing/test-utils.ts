@@ -152,8 +152,9 @@ export class SparkFactory {
   static create(overrides: Partial<Spark> = {}): Spark {
     const spark = new Spark();
     spark.id = overrides.id || 'test-spark-id';
-    spark.user1Id = overrides.user1Id || 'test-user-1';
-    spark.user2Id = overrides.user2Id || 'test-user-2';
+    // Create mock user references
+    spark.user1 = overrides.user1 || UserFactory.create({ id: 'test-user-1' }) as any;
+    spark.user2 = overrides.user2 || UserFactory.create({ id: 'test-user-2' }) as any;
     spark.latitude = overrides.latitude || 37.7749;
     spark.longitude = overrides.longitude || -122.4194;
     spark.status = overrides.status || SparkStatus.PENDING;
@@ -167,8 +168,8 @@ export class SparkFactory {
     return Array.from({ length: count }, (_, index) => 
       this.create({ 
         id: `test-spark-${index + 1}`,
-        user1Id: `test-user-${index + 1}`,
-        user2Id: `test-user-${index + 2}`,
+        user1: UserFactory.create({ id: `test-user-${index + 1}` }) as any,
+        user2: UserFactory.create({ id: `test-user-${index + 2}` }) as any,
         ...overrides 
       })
     );
@@ -678,8 +679,8 @@ export class TestDataGenerators {
         sparks.push(
           SparkFactory.create({
             id: `spark-${i}`,
-            user1Id: user1.id,
-            user2Id: user2.id,
+            user1: user1 as any,
+            user2: user2 as any,
             latitude: coordinates.latitude,
             longitude: coordinates.longitude,
           })

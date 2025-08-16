@@ -26,18 +26,21 @@ export class AdvancedRateLimitGuard extends ThrottlerGuard {
   private readonly logger = new Logger(AdvancedRateLimitGuard.name);
   
   constructor(
-    private readonly reflector: Reflector,
+    protected readonly reflector: Reflector,
     private readonly configService: ConfigService,
     private readonly cacheService: RedisCacheService,
   ) {
     super(
       {
-        ttl: configService.get('security.rateLimit.ttl', 60),
-        limit: configService.get('security.rateLimit.max', 100),
-      },
-      {
+        throttlers: [
+          {
+            ttl: configService.get('security.rateLimit.ttl', 60000), // ttl should be in milliseconds
+            limit: configService.get('security.rateLimit.max', 100),
+          },
+        ],
         errorMessage: 'Too many requests. Please try again later.',
       },
+      {} as any, // storage
       reflector,
     );
   }
