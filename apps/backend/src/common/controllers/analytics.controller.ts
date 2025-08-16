@@ -7,7 +7,6 @@ import {
   UseGuards,
   Logger,
   ParseEnumPipe,
-  ParseDatePipe,
   Res,
   HttpStatus,
   HttpException,
@@ -64,8 +63,8 @@ export class AnalyticsController {
   @UseGuards(AdminGuard)
   async getAnalyticsMetrics(
     @Query('timeframe', new ParseEnumPipe(['hour', 'day', 'week', 'month'])) timeframe: 'hour' | 'day' | 'week' | 'month',
-    @Query('startDate', new ParseDatePipe({ optional: true })) startDate?: Date,
-    @Query('endDate', new ParseDatePipe({ optional: true })) endDate?: Date,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
   ): Promise<AnalyticsMetrics> {
     this.logger.log(`Analytics metrics request for ${timeframe}`);
     try {
@@ -84,8 +83,8 @@ export class AnalyticsController {
   @UseGuards(AdminGuard)
   async generateReport(
     @Query('type', new ParseEnumPipe(['daily', 'weekly', 'monthly', 'custom'])) reportType: 'daily' | 'weekly' | 'monthly' | 'custom',
-    @Query('startDate', new ParseDatePipe({ optional: true })) startDate?: Date,
-    @Query('endDate', new ParseDatePipe({ optional: true })) endDate?: Date,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
   ): Promise<AnalyticsReport> {
     this.logger.log(`Analytics report request for ${reportType}`);
     
@@ -202,8 +201,8 @@ export class AnalyticsController {
     @Query('format', new ParseEnumPipe(['json', 'csv', 'excel'])) format: 'json' | 'csv' | 'excel',
     @Query('timeframe', new ParseEnumPipe(['day', 'week', 'month'])) timeframe: 'day' | 'week' | 'month',
     @Res() res: Response,
-    @Query('startDate', new ParseDatePipe({ optional: true })) startDate?: Date,
-    @Query('endDate', new ParseDatePipe({ optional: true })) endDate?: Date,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
   ): Promise<void> {
     this.logger.log(`Analytics export request: ${format} format for ${timeframe}`);
     

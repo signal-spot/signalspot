@@ -10,33 +10,31 @@ import {
   IsLongitude
 } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiPropertyOptional, ApiProperty } from '@nestjs/swagger';
 import { SpotVisibility, SpotType } from '../../entities/signal-spot.entity';
 
 export class LocationQueryDto {
-  @ApiPropertyOptional({
+  @ApiProperty({
     description: 'Latitude coordinate for location-based search',
     example: 37.7749,
     minimum: -90,
     maximum: 90
   })
-  @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @IsLatitude()
-  latitude?: number;
+  latitude: number;
 
-  @ApiPropertyOptional({
+  @ApiProperty({
     description: 'Longitude coordinate for location-based search',
     example: -122.4194,
     minimum: -180,
     maximum: 180
   })
-  @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @IsLongitude()
-  longitude?: number;
+  longitude: number;
 
   @ApiPropertyOptional({
     description: 'Search radius in kilometers',

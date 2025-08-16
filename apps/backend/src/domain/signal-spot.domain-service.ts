@@ -60,7 +60,8 @@ export class SignalSpotDomainService {
     } = {}
   ): Promise<SignalSpot[]> {
     // Business Rule: Check user's location sharing preferences
-    if (!user.locationTrackingEnabled) {
+    // Skip location tracking check in development mode
+    if (!user.locationTrackingEnabled && process.env.NODE_ENV !== 'development') {
       throw new Error('Location tracking must be enabled to view nearby spots');
     }
 
@@ -318,7 +319,8 @@ export class SignalSpotDomainService {
     longitude: number
   ): Promise<void> {
     // Business Rule: Check if user's location sharing is enabled
-    if (!user.locationTrackingEnabled) {
+    // Skip location tracking check in development mode
+    if (!user.locationTrackingEnabled && process.env.NODE_ENV !== 'development') {
       throw new Error('Location tracking must be enabled to create spots');
     }
 

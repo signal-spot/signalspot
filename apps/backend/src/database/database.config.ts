@@ -18,6 +18,12 @@ export const databaseConfig: Options = {
   dbName: process.env.DB_DATABASE || 'signalspot',
   entities: [User, Location, SignalSpot, Spark, LocationHistory, SacredSite, SiteActivity, Notification],
   debug: process.env.NODE_ENV !== 'production',
+  // Auto-sync schema in development (creates missing tables)
+  schemaGenerator: {
+    disableForeignKeys: false,
+    createForeignKeyConstraints: true,
+  },
+  allowGlobalContext: true,
   migrations: {
     path: './migrations',
     pathTs: './migrations',

@@ -282,13 +282,13 @@ export class SparkDetectionService {
     return this.sparkRepository.findOne({
       $or: [
         {
-          user1Id,
-          user2Id,
+          user1: user1Id,
+          user2: user2Id,
           createdAt: { $gte: since },
         },
         {
-          user1Id: user2Id,
-          user2Id: user1Id,
+          user1: user2Id,
+          user2: user1Id,
           createdAt: { $gte: since },
         },
       ],
@@ -297,8 +297,9 @@ export class SparkDetectionService {
 
   private async createSpark(sparkData: SparkDetectionResult): Promise<Spark> {
     const spark = this.sparkRepository.create({
-      user1Id: sparkData.user1.id,
-      user2Id: sparkData.user2.id,
+      // Set user relations directly
+      user1: sparkData.user1,
+      user2: sparkData.user2,
       user1: sparkData.user1,
       user2: sparkData.user2,
       type: sparkData.type,
@@ -489,7 +490,7 @@ export class SparkDetectionService {
       throw new Error('Spark not found');
     }
 
-    if (spark.user1Id !== userId && spark.user2Id !== userId) {
+    if (spark.user1.id !== userId && spark.user2.id !== userId) {
       throw new Error('Unauthorized');
     }
 
@@ -498,7 +499,7 @@ export class SparkDetectionService {
     }
 
     // Update user response
-    if (spark.user1Id === userId) {
+    if (spark.user1.id === userId) {
       spark.user1Accepted = accepted;
       spark.user1ResponseAt = new Date();
     } else {

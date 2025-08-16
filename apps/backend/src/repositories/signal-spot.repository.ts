@@ -164,63 +164,42 @@ export class SignalSpotRepository implements ISignalSpotRepository {
     const limit = options.limit || 50;
     const offset = options.offset || 0;
     
-    // Build base conditions
-    const whereConditions = ['s.is_active = true'];
-    const params: any[] = [coordinates.latitude, coordinates.longitude, radiusKm * 1000]; // Convert km to meters
-
-    if (options.excludeExpired !== false) {
-      whereConditions.push('s.expires_at > NOW()');
-    }
-
-    if (options.visibility) {
-      whereConditions.push('s.visibility = $' + (params.length + 1));
-      params.push(options.visibility);
-    }
-
-    if (options.types && options.types.length > 0) {
-      whereConditions.push('s.type = ANY($' + (params.length + 1) + ')');
-      params.push(options.types);
-    }
-
-    if (options.tags && options.tags.length > 0) {
-      whereConditions.push('s.tags && $' + (params.length + 1));
-      params.push(options.tags);
-    }
-
-    const whereClause = whereConditions.join(' AND ');
-
-    // PostGIS query for efficient spatial search
-    const query = `
+    // PostGIS spatial query for nearby signal spots
+    const result = await this.em.getConnection().getKnex().raw(`
       SELECT s.*, 
-             ST_Distance(
-               ST_Point(s.longitude, s.latitude)::geography,
-               ST_Point($2, $1)::geography
-             ) as distance_meters,
              u.id as creator_id,
              u.username as creator_username,
              u.email as creator_email,
              u.first_name as creator_first_name,
              u.last_name as creator_last_name,
              u.avatar_url as creator_avatar_url,
-             u.is_verified as creator_is_verified
+             u.is_email_verified as creator_is_verified,
+             ST_Distance(
+               ST_Point(s.longitude, s.latitude),
+               ST_Point(?, ?)
+             ) as distance_meters
       FROM signal_spot s
-      JOIN user u ON s.creator_id = u.id
-      WHERE ${whereClause}
+      JOIN "user" u ON s.creator_id = u.id
+      WHERE s.is_active = true 
+        AND (s.expires_at IS NULL OR s.expires_at > NOW())
         AND ST_DWithin(
-          ST_Point(s.longitude, s.latitude)::geography,
-          ST_Point($2, $1)::geography,
-          $3
+          ST_Point(s.longitude, s.latitude),
+          ST_Point(?, ?),
+          ?
         )
-      ORDER BY ST_Distance(
-        ST_Point(s.longitude, s.latitude)::geography,
-        ST_Point($2, $1)::geography
-      )
-      LIMIT ${limit} OFFSET ${offset};
-    `;
-
-    const result = await this.em.getConnection().execute(query, params);
+      ORDER BY distance_meters ASC
+      LIMIT ? OFFSET ?;
+    `, [
+      coordinates.longitude,
+      coordinates.latitude,
+      coordinates.longitude,
+      coordinates.latitude,
+      radiusKm * 1000, // Convert km to meters for PostGIS
+      limit, 
+      offset
+    ]);
     
-    return this.mapRawResultsToEntities(result);
+    return this.mapRawResultsToEntities(result.rows);
   }
 
   private mapRawResultsToEntities(rawResults: any[]): SignalSpot[] {

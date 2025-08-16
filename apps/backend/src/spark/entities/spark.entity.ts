@@ -26,7 +26,7 @@ export enum SparkStatus {
 }
 
 @Entity({ tableName: 'sparks' })
-@Index({ properties: ['user1Id', 'user2Id', 'createdAt'] })
+@Index({ properties: ['user1', 'user2', 'createdAt'] })
 @Index({ properties: ['status', 'createdAt'] })
 @Index({ properties: ['type', 'createdAt'] })
 @Index({ properties: ['expiresAt', 'status'] }) // Expiration cleanup queries
@@ -35,18 +35,12 @@ export class Spark {
   @PrimaryKey()
   id: string = v4();
 
-  @Property()
+  @ManyToOne(() => User, { ref: true, eager: true })
   @Index()
-  user1Id: string;
-
-  @Property()
-  @Index()
-  user2Id: string;
-
-  @ManyToOne(() => User, { ref: true, eager: true, joinColumn: 'user1Id' })
   user1: Ref<User>;
 
-  @ManyToOne(() => User, { ref: true, eager: true, joinColumn: 'user2Id' })
+  @ManyToOne(() => User, { ref: true, eager: true })
+  @Index()  
   user2: Ref<User>;
 
   @Enum(() => SparkType)
