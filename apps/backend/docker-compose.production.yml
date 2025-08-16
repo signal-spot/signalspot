@@ -6,10 +6,12 @@ services:
     platform: linux/arm64
     container_name: signalspot-postgres
     restart: always
+    env_file:
+      - .env.production
     ports:
-      - "5432:5432"
+      - "${DB_PORT:-5432}:5432"
     environment:
-      POSTGRES_DB: ${DB_DATABASE:-signalspot}
+      POSTGRES_DB: ${DB_DATABASE:-${DB_NAME:-signalspot}}
       POSTGRES_USER: ${DB_USERNAME:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_HOST_AUTH_METHOD: md5
@@ -17,7 +19,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ../../init-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-postgres} -d ${DB_DATABASE:-signalspot}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-postgres} -d ${DB_DATABASE:-${DB_NAME:-signalspot}}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -28,13 +30,15 @@ services:
     image: redis:7-alpine
     container_name: signalspot-redis
     restart: always
+    env_file:
+      - .env.production
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
     command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-signalspot_redis_2024}
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-signalspot_redis_2024}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
