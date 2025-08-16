@@ -2,11 +2,11 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "outDir": "./dist",
+    "rootDir": "./src",
     "module": "commonjs",
-    "types": ["node"],
+    "target": "es2020",
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
-    "target": "es2020",
     "skipLibCheck": true,
     "noImplicitAny": false,
     "strict": false,
@@ -16,5 +16,5 @@
     "noFallthroughCasesInSwitch": false
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["jest.config.ts", "src/**/*.spec.ts", "src/**/*.test.ts"]
+  "exclude": ["node_modules", "test", "dist", "**/*spec.ts", "**/*.test.ts"]
 }
