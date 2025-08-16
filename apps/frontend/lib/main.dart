@@ -49,13 +49,18 @@ void main() async {
     await pushService.initialize();
     print('✓ Push Notification service initialized');
     
-    // Firebase Analytics 초기화
-    analytics = FirebaseAnalytics.instance;
-    await analytics.setAnalyticsCollectionEnabled(true);
-    
-    // Analytics 서비스 초기화
-    await AnalyticsService.initialize(analytics);
-    print('✓ Firebase Analytics initialized');
+    // Firebase Analytics 초기화 시도
+    try {
+      analytics = FirebaseAnalytics.instance;
+      await analytics.setAnalyticsCollectionEnabled(true);
+      
+      // Analytics 서비스 초기화
+      await AnalyticsService.initialize(analytics);
+      print('✓ Firebase Analytics initialized');
+    } catch (analyticsError) {
+      print('⚠️ Firebase Analytics initialization failed (non-critical): $analyticsError');
+      // Analytics 실패는 앱 실행을 중단시키지 않음
+    }
   } catch (e, stackTrace) {
     print('❌ Firebase initialization failed: $e');
     print('Stack trace: $stackTrace');

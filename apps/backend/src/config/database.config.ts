@@ -76,7 +76,6 @@ export default registerAs('database', (): MikroOrmModuleOptions => {
     },
     
     // Performance optimizations
-    autoFlush: true,
     forceUtcTimezone: true,
     timezone: 'Asia/Seoul',
     

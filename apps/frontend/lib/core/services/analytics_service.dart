@@ -20,16 +20,18 @@ class AnalyticsService {
   }
   
   static Future<void> _setDefaultUserProperties() async {
+    if (_analytics == null) return;
+    
     try {
       // 플랫폼 정보 설정
       if (defaultTargetPlatform == TargetPlatform.iOS) {
-        await _analytics.setUserProperty(name: 'platform', value: 'iOS');
+        await _analytics!.setUserProperty(name: 'platform', value: 'iOS');
       } else if (defaultTargetPlatform == TargetPlatform.android) {
-        await _analytics.setUserProperty(name: 'platform', value: 'Android');
+        await _analytics!.setUserProperty(name: 'platform', value: 'Android');
       }
       
       // 앱 버전 설정 (필요시 PackageInfo 사용)
-      await _analytics.setUserProperty(name: 'app_version', value: '1.0.0');
+      await _analytics!.setUserProperty(name: 'app_version', value: '1.0.0');
     } catch (e) {
       debugPrint('Failed to set user properties: $e');
     }
@@ -37,8 +39,10 @@ class AnalyticsService {
   
   // 사용자 로그인 이벤트
   static Future<void> logLogin({required String method}) async {
+    if (_analytics == null) return;
+    
     try {
-      await _analytics.logLogin(loginMethod: method);
+      await _analytics!.logLogin(loginMethod: method);
     } catch (e) {
       debugPrint('Failed to log login event: $e');
     }
@@ -46,8 +50,10 @@ class AnalyticsService {
   
   // 사용자 회원가입 이벤트
   static Future<void> logSignUp({required String method}) async {
+    if (_analytics == null) return;
+    
     try {
-      await _analytics.logSignUp(signUpMethod: method);
+      await _analytics!.logSignUp(signUpMethod: method);
     } catch (e) {
       debugPrint('Failed to log sign up event: $e');
     }
@@ -58,8 +64,10 @@ class AnalyticsService {
     required String screenName,
     String? screenClass,
   }) async {
+    if (_analytics == null) return;
+    
     try {
-      await _analytics.logScreenView(
+      await _analytics!.logScreenView(
         screenName: screenName,
         screenClass: screenClass ?? screenName,
       );
@@ -75,8 +83,10 @@ class AnalyticsService {
     required double longitude,
     String? message,
   }) async {
+    if (_analytics == null) return;
+    
     try {
-      await _analytics.logEvent(
+      await _analytics!.logEvent(
         name: 'signal_spot_created',
         parameters: {
           'spot_id': spotId,
@@ -94,8 +104,10 @@ class AnalyticsService {
     required String spotId,
     required String viewSource,
   }) async {
+    if (_analytics == null) return;
+    
     try {
-      await _analytics.logEvent(
+      await _analytics!.logEvent(
         name: 'signal_spot_viewed',
         parameters: {
           'spot_id': spotId,
@@ -111,8 +123,10 @@ class AnalyticsService {
     required String spotId,
     required bool isLiked,
   }) async {
+    if (_analytics == null) return;
+    
     try {
-      await _analytics.logEvent(
+      await _analytics!.logEvent(
         name: isLiked ? 'signal_spot_liked' : 'signal_spot_unliked',
         parameters: {
           'spot_id': spotId,
@@ -129,8 +143,10 @@ class AnalyticsService {
     required String receiverId,
     String? message,
   }) async {
+    if (_analytics == null) return;
+    
     try {
-      await _analytics.logEvent(
+      await _analytics!.logEvent(
         name: 'spark_sent',
         parameters: {
           'spark_id': sparkId,
@@ -147,8 +163,10 @@ class AnalyticsService {
     required String sparkId,
     required String senderId,
   }) async {
+    if (_analytics == null) return;
+    
     try {
-      await _analytics.logEvent(
+      await _analytics!.logEvent(
         name: 'spark_received',
         parameters: {
           'spark_id': sparkId,
@@ -163,8 +181,10 @@ class AnalyticsService {
   static Future<void> logSparkAccepted({
     required String sparkId,
   }) async {
+    if (_analytics == null) return;
+    
     try {
-      await _analytics.logEvent(
+      await _analytics!.logEvent(
         name: 'spark_accepted',
         parameters: {
           'spark_id': sparkId,
@@ -178,8 +198,10 @@ class AnalyticsService {
   static Future<void> logSparkRejected({
     required String sparkId,
   }) async {
+    if (_analytics == null) return;
+    
     try {
-      await _analytics.logEvent(
+      await _analytics!.logEvent(
         name: 'spark_rejected',
         parameters: {
           'spark_id': sparkId,
@@ -196,6 +218,8 @@ class AnalyticsService {
     required String searchType,
     int? resultsCount,
   }) async {
+    if (_analytics == null) return;
+    
     try {
       final Map<String, Object> params = {
         'search_type': searchType, // 'signal_spots', 'users', 'locations'
@@ -204,7 +228,7 @@ class AnalyticsService {
         params['results_count'] = resultsCount;
       }
       
-      await _analytics.logSearch(
+      await _analytics!.logSearch(
         searchTerm: searchTerm,
         parameters: params,
       );
@@ -217,8 +241,10 @@ class AnalyticsService {
   static Future<void> logLocationPermission({
     required bool granted,
   }) async {
+    if (_analytics == null) return;
+    
     try {
-      await _analytics.logEvent(
+      await _analytics!.logEvent(
         name: granted ? 'location_permission_granted' : 'location_permission_denied',
       );
     } catch (e) {
@@ -230,8 +256,10 @@ class AnalyticsService {
   static Future<void> logNotificationPermission({
     required bool granted,
   }) async {
+    if (_analytics == null) return;
+    
     try {
-      await _analytics.logEvent(
+      await _analytics!.logEvent(
         name: granted ? 'notification_permission_granted' : 'notification_permission_denied',
       );
     } catch (e) {
@@ -243,8 +271,10 @@ class AnalyticsService {
   static Future<void> logProfileCompleted({
     required int completionPercentage,
   }) async {
+    if (_analytics == null) return;
+    
     try {
-      await _analytics.logEvent(
+      await _analytics!.logEvent(
         name: 'profile_completed',
         parameters: {
           'completion_percentage': completionPercentage,
@@ -261,8 +291,10 @@ class AnalyticsService {
     required String method,
     required String itemId,
   }) async {
+    if (_analytics == null) return;
+    
     try {
-      await _analytics.logShare(
+      await _analytics!.logShare(
         contentType: contentType,
         itemId: itemId,
         method: method,
@@ -277,13 +309,15 @@ class AnalyticsService {
     required String name,
     Map<String, dynamic>? parameters,
   }) async {
+    if (_analytics == null) return;
+    
     try {
       // Convert Map<String, dynamic> to Map<String, Object>
       final Map<String, Object>? convertedParams = parameters?.map(
         (key, value) => MapEntry(key, value as Object),
       );
       
-      await _analytics.logEvent(
+      await _analytics!.logEvent(
         name: name,
         parameters: convertedParams,
       );
@@ -294,8 +328,10 @@ class AnalyticsService {
   
   // 사용자 ID 설정 (로그인 후)
   static Future<void> setUserId(String? userId) async {
+    if (_analytics == null) return;
+    
     try {
-      await _analytics.setUserId(id: userId);
+      await _analytics!.setUserId(id: userId);
     } catch (e) {
       debugPrint('Failed to set user ID: $e');
     }
@@ -306,8 +342,10 @@ class AnalyticsService {
     required String name,
     required String? value,
   }) async {
+    if (_analytics == null) return;
+    
     try {
-      await _analytics.setUserProperty(name: name, value: value);
+      await _analytics!.setUserProperty(name: name, value: value);
     } catch (e) {
       debugPrint('Failed to set user property: $e');
     }

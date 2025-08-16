@@ -30,17 +30,7 @@ export class Comment extends BaseEntity {
   @Property({ 
     type: 'jsonb', 
     default: '[]',
-    serializer: (value: string[]) => JSON.stringify(value || []),
-    hydrate: (value: string | string[]) => {
-      if (typeof value === 'string') {
-        try {
-          return JSON.parse(value);
-        } catch {
-          return [];
-        }
-      }
-      return Array.isArray(value) ? value : [];
-    }
+    serializer: (value: string[]) => JSON.stringify(value || [])
   })
   likedBy: string[] = [];
 

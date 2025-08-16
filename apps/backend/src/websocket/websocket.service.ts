@@ -248,17 +248,23 @@ export class WebSocketService {
     const participant2Id = typeof chatRoom.participant2 === 'string' ? chatRoom.participant2 : chatRoom.participant2.id;
     
     await this.sendNotificationToUser(participant1Id, {
-      type: WebSocketEvent.CHAT_ROOM_CREATED,
-      data,
+      id: `chat_room_${chatRoom.id}_${Date.now()}`,
+      type: 'chat_room_created',
+      title: 'New Chat Room',
       message: `${(chatRoom.participant2 as any).username || 'Someone'}님과의 채팅방이 생성되었습니다.`,
-      createdAt: new Date(),
+      data,
+      timestamp: new Date(),
+      priority: 'normal',
     });
 
     await this.sendNotificationToUser(participant2Id, {
-      type: WebSocketEvent.CHAT_ROOM_CREATED,
-      data,
+      id: `chat_room_${chatRoom.id}_${Date.now()}`,
+      type: 'chat_room_created',
+      title: 'New Chat Room',
       message: `${(chatRoom.participant1 as any).username || 'Someone'}님과의 채팅방이 생성되었습니다.`,
-      createdAt: new Date(),
+      data,
+      timestamp: new Date(),
+      priority: 'normal',
     });
 
     this.logger.log(`Notified chat room creation for spark: ${chatRoom.sparkId}`);

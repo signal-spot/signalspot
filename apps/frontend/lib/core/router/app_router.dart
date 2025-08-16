@@ -63,7 +63,7 @@ final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: '/splash',
     refreshListenable: authNotifier,
-    observers: [AnalyticsService.observer],
+    observers: AnalyticsService.observer != null ? [AnalyticsService.observer!] : [],
     redirect: (context, state) {
       // 매번 최신 authState를 읽음
       final currentAuthState = ref.read(authProvider);
