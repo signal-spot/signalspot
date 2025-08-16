@@ -14,6 +14,19 @@ async function bootstrap() {
   // 한국 시간대 설정
   process.env.TZ = 'Asia/Seoul';
   
+  // Log environment info at startup
+  const nodeEnv = process.env.NODE_ENV || 'development';
+  const envFile = nodeEnv === 'production' ? '.env.production' : '.env.development';
+  
+  Logger.log('================================================');
+  Logger.log('  SignalSpot Backend Starting');
+  Logger.log('================================================');
+  Logger.log(`Environment: ${nodeEnv}`);
+  Logger.log(`Config File: ${envFile}`);
+  Logger.log(`Database: ${process.env.DB_HOST || 'localhost'}:${process.env.DB_PORT || 5432}/${process.env.DB_DATABASE || process.env.DB_NAME || 'signalspot'}`);
+  Logger.log(`Redis: ${process.env.REDIS_HOST || 'localhost'}:${process.env.REDIS_PORT || 6379}`);
+  Logger.log('================================================');
+  
   const app = await NestFactory.create(AppModule);
   
   // Get configuration service
@@ -127,17 +140,18 @@ async function bootstrap() {
   const port = process.env.PORT || 3000;
   await app.listen(port, '0.0.0.0');
   
-  Logger.log(
-    `🚀 SignalSpot API is running on: http://localhost:${port}/${globalPrefix}`,
-  );
-  
-  Logger.log(
-    `🕐 Server timezone: ${process.env.TZ || 'UTC'} (Current time: ${new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })})`,
-  );
+  Logger.log('================================================');
+  Logger.log('  SignalSpot Backend Started Successfully');
+  Logger.log('================================================');
+  Logger.log(`🚀 API URL: http://localhost:${port}/${globalPrefix}`);
+  Logger.log(`⚙️  Environment: ${nodeEnv}`);
+  Logger.log(`🕐 Timezone: ${process.env.TZ || 'UTC'} (${new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })})`);
   
   if (configService.get('NODE_ENV') !== 'production') {
-    Logger.log(`📚 API Documentation: http://localhost:${port}/docs`);
+    Logger.log(`📚 API Docs: http://localhost:${port}/docs`);
   }
+  
+  Logger.log('================================================');
 }
 
 bootstrap();
