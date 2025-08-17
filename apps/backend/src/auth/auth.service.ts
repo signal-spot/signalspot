@@ -466,12 +466,12 @@ export class AuthService {
           throw new UnauthorizedException('Firebase not configured');
         }
         
-        this.logger.log('Initializing Firebase Admin SDK', 'AuthService');
+        this.logger.log('Initializing Firebase Admin SDK in AuthService', 'AuthService');
         admin.initializeApp({
           credential: admin.credential.cert(serviceAccount),
-          projectId: this.configService.get('firebase.projectId'),
+          projectId: serviceAccount.project_id || this.configService.get('firebase.projectId'),
         });
-        this.logger.log('Firebase Admin SDK initialized successfully', 'AuthService');
+        this.logger.log(`Firebase Admin SDK initialized successfully with project ID: ${serviceAccount.project_id}`, 'AuthService');
       }
 
       // Log token info for debugging (remove in production)
