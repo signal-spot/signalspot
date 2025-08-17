@@ -57,7 +57,6 @@ import { CacheInterceptor } from '../common/interceptors/cache.interceptor';
     SignalSpotModule,
     SparkModule,
     FeedModule,
-    PushNotificationModule,
     NotificationsModule,
     SacredSiteModule,
     ChatModule,
