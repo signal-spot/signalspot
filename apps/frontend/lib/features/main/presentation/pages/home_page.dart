@@ -181,6 +181,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                   ),
                 ],
               ),
+              // 알림 버튼 - Stack에 clipBehavior 추가하여 배지가 잘리지 않도록 함
               GestureDetector(
                 onTap: () {
                   // 알림 페이지로 이동
@@ -188,113 +189,138 @@ class _HomePageState extends ConsumerState<HomePage> {
                     context.push('/notifications');
                   }
                 },
-                child: Container(
-                  padding: const EdgeInsets.all(AppSpacing.sm),
-                  decoration: BoxDecoration(
-                    color: AppColors.white.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(
-                      AppSpacing.borderRadiusMd,
-                    ),
-                  ),
-                  child: Stack(
-                    children: [
-                      const Icon(
+                child: Stack(
+                  clipBehavior: Clip.none, // 배지가 Stack 영역을 벗어나도 잘리지 않도록 설정
+                  children: [
+                    // 알림 아이콘 컨테이너
+                    Container(
+                      padding: const EdgeInsets.all(AppSpacing.sm),
+                      decoration: BoxDecoration(
+                        color: AppColors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(
+                          AppSpacing.borderRadiusMd,
+                        ),
+                      ),
+                      child: const Icon(
                         Icons.notifications_outlined,
                         color: AppColors.white,
                         size: AppSpacing.iconMd,
                       ),
-                      // 알림 뱃지 - 읽지 않은 알림이 있을 때만 표시
-                      Consumer(
-                        builder: (context, ref, _) {
-                          final showBadge = ref.watch(showNotificationBadgeProvider);
-                          final unreadCount = ref.watch(unreadNotificationCountProvider);
-                          final notificationList = ref.watch(notificationListProvider);
-                          
-                          // 디버깅 로그 추가
-                          print('[DEBUG] HomePage Badge - showBadge: $showBadge');
-                          print('[DEBUG] HomePage Badge - unreadCount: $unreadCount');
-                          print('[DEBUG] HomePage Badge - notificationList: $notificationList');
-                          
-                          // notificationList 상세 정보 로깅
-                          notificationList.when(
-                            data: (response) {
-                              print('[DEBUG] HomePage Badge - response.unreadCount: ${response.unreadCount}');
-                              print('[DEBUG] HomePage Badge - response.notifications.length: ${response.notifications.length}');
-                              print('[DEBUG] HomePage Badge - response.totalCount: ${response.totalCount}');
-                            },
-                            loading: () => print('[DEBUG] HomePage Badge - Loading notifications...'),
-                            error: (error, _) => print('[DEBUG] HomePage Badge - Error: $error'),
-                          );
-                          
-                          // unreadCount 상세 정보 로깅
-                          unreadCount.when(
-                            data: (count) => print('[DEBUG] HomePage Badge - Unread count value: $count'),
-                            loading: () => print('[DEBUG] HomePage Badge - Unread count loading...'),
-                            error: (error, _) => print('[DEBUG] HomePage Badge - Unread count error: $error'),
-                          );
-                          
-                          if (!showBadge) {
-                            print('[DEBUG] HomePage Badge - Not showing badge (showBadge is false)');
-                            return const SizedBox.shrink();
-                          }
-                          
-                          return Positioned(
-                            right: -2,
-                            top: -2,
-                            child: unreadCount.when(
-                              data: (count) {
-                                print('[DEBUG] HomePage Badge - Rendering badge with count: $count');
-                                if (count <= 0) {
-                                  print('[DEBUG] HomePage Badge - Count is 0 or less, hiding badge');
-                                  return const SizedBox.shrink();
-                                }
-                                
-                                // 항상 카운트를 표시하도록 변경
-                                final displayText = count > 99 ? '99+' : count.toString();
-                                final badgeSize = count > 99 ? 20.0 : (count > 9 ? 18.0 : 16.0);
-                                
-                                print('[DEBUG] HomePage Badge - Showing badge with text: $displayText');
-                                
-                                return Container(
-                                  constraints: BoxConstraints(
-                                    minWidth: badgeSize,
-                                    minHeight: badgeSize,
+                    ),
+                    // 알림 뱃지 - 읽지 않은 알림이 있을 때만 표시
+                    Consumer(
+                      builder: (context, ref, _) {
+                        final showBadge = ref.watch(showNotificationBadgeProvider);
+                        final unreadCount = ref.watch(unreadNotificationCountProvider);
+                        final notificationList = ref.watch(notificationListProvider);
+                        
+                        // 디버깅 로그 추가
+                        print('[DEBUG] HomePage Badge - showBadge: $showBadge');
+                        print('[DEBUG] HomePage Badge - unreadCount: $unreadCount');
+                        print('[DEBUG] HomePage Badge - notificationList: $notificationList');
+                        
+                        // notificationList 상세 정보 로깅
+                        notificationList.when(
+                          data: (response) {
+                            print('[DEBUG] HomePage Badge - response.unreadCount: ${response.unreadCount}');
+                            print('[DEBUG] HomePage Badge - response.notifications.length: ${response.notifications.length}');
+                            print('[DEBUG] HomePage Badge - response.totalCount: ${response.totalCount}');
+                          },
+                          loading: () => print('[DEBUG] HomePage Badge - Loading notifications...'),
+                          error: (error, _) => print('[DEBUG] HomePage Badge - Error: $error'),
+                        );
+                        
+                        // unreadCount 상세 정보 로깅
+                        unreadCount.when(
+                          data: (count) => print('[DEBUG] HomePage Badge - Unread count value: $count'),
+                          loading: () => print('[DEBUG] HomePage Badge - Unread count loading...'),
+                          error: (error, _) => print('[DEBUG] HomePage Badge - Unread count error: $error'),
+                        );
+                        
+                        if (!showBadge) {
+                          print('[DEBUG] HomePage Badge - Not showing badge (showBadge is false)');
+                          return const SizedBox.shrink();
+                        }
+                        
+                        return Positioned(
+                          // 우측 상단 모서리에 배치 (Material Design 3 가이드라인)
+                          right: -4,  // 살짝 바깥쪽으로 배치
+                          top: -4,    // 살짝 바깥쪽으로 배치
+                          child: unreadCount.when(
+                            data: (count) {
+                              print('[DEBUG] HomePage Badge - Rendering badge with count: $count');
+                              if (count <= 0) {
+                                print('[DEBUG] HomePage Badge - Count is 0 or less, hiding badge');
+                                return const SizedBox.shrink();
+                              }
+                              
+                              // 숫자 표시 로직 개선 (iOS HIG 스타일)
+                              final displayText = count > 99 ? '99+' : count.toString();
+                              
+                              // 배지 크기 계산 - 최소 크기 보장
+                              final isLarge = count > 99;
+                              final isMedium = count > 9;
+                              final badgeSize = isLarge ? 22.0 : (isMedium ? 20.0 : 18.0);
+                              
+                              print('[DEBUG] HomePage Badge - Showing badge with text: $displayText');
+                              
+                              return Container(
+                                // 최소 크기 보장
+                                constraints: BoxConstraints(
+                                  minWidth: badgeSize,
+                                  minHeight: badgeSize,
+                                ),
+                                padding: EdgeInsets.symmetric(
+                                  // 숫자에 따른 패딩 조정
+                                  horizontal: isLarge ? 5.0 : (isMedium ? 4.0 : 3.0),
+                                  vertical: 2.0,
+                                ),
+                                decoration: BoxDecoration(
+                                  // Material Design 3 색상
+                                  color: AppColors.error,
+                                  // 완전한 원형 또는 타원형
+                                  borderRadius: BorderRadius.circular(badgeSize / 2),
+                                  // 흰색 테두리로 배경과 구분
+                                  border: Border.all(
+                                    color: AppColors.white,
+                                    width: 2.0,
                                   ),
-                                  padding: const EdgeInsets.all(2),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.error,
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
+                                  // 그림자 추가로 깊이감 표현
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.2),
+                                      blurRadius: 4,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    displayText,
+                                    style: TextStyle(
                                       color: AppColors.white,
-                                      width: 1.5,
+                                      fontSize: isLarge ? 10.0 : (isMedium ? 11.0 : 12.0),
+                                      fontWeight: FontWeight.bold,
+                                      height: 1.15, // 줄 높이 약간 증가시켜 가독성 향상
                                     ),
+                                    textAlign: TextAlign.center,
                                   ),
-                                  child: Center(
-                                    child: Text(
-                                      displayText,
-                                      style: AppTextStyles.labelSmall.copyWith(
-                                        color: AppColors.white,
-                                        fontSize: count > 99 ? 9 : (count > 9 ? 10 : 11),
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                );
-                              },
-                              loading: () {
-                                print('[DEBUG] HomePage Badge - Unread count is loading');
-                                return const SizedBox.shrink();
-                              },
-                              error: (error, _) {
-                                print('[DEBUG] HomePage Badge - Error in unread count: $error');
-                                return const SizedBox.shrink();
-                              },
-                            ),
-                          );
-                        },
-                      ),
-                    ],
-                  ),
+                                ),
+                              );
+                            },
+                            loading: () {
+                              print('[DEBUG] HomePage Badge - Unread count is loading');
+                              return const SizedBox.shrink();
+                            },
+                            error: (error, _) {
+                              print('[DEBUG] HomePage Badge - Error in unread count: $error');
+                              return const SizedBox.shrink();
+                            },
+                          ),
+                        );
+                      },
+                    ),
+                  ],
                 ),
               ),
             ],

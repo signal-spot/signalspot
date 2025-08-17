@@ -357,6 +357,9 @@ class ProfileService {
   // 아바타 업로드
   Future<UserProfile> uploadAvatar(String filePath) async {
     try {
+      print('[DEBUG] ProfileService.uploadAvatar - Starting upload');
+      print('[DEBUG] ProfileService.uploadAvatar - File path: $filePath');
+      
       // 파일 확장자로 Content-Type 결정
       String fileName = filePath.split('/').last;
       String? mimeType;
@@ -392,8 +395,13 @@ class ProfileService {
         ),
       );
       
+      print('[DEBUG] ProfileService.uploadAvatar - Response status: ${response.statusCode}');
+      print('[DEBUG] ProfileService.uploadAvatar - Response data: ${response.data}');
+      
       // 백엔드 응답을 프론트엔드 모델에 맞게 매핑
       final data = response.data['data'] ?? response.data;
+      print('[DEBUG] ProfileService.uploadAvatar - Extracted data: $data');
+      print('[DEBUG] ProfileService.uploadAvatar - Avatar URL: ${data['avatarUrl']}');
       
       return UserProfile(
         id: data['id'] ?? '',
@@ -402,15 +410,27 @@ class ProfileService {
         bio: data['bio'],
         avatarUrl: data['avatarUrl'],
         birthDate: data['dateOfBirth'] != null ? DateTime.parse(data['dateOfBirth']) : null,
-        location: data['location'],
+        location: _parseLocation(data['location']),
         interests: data['interests'] != null ? List<String>.from(data['interests']) : null,
         visibility: _parseVisibility(data['profileVisibility']),
         createdAt: DateTime.parse(data['createdAt'] ?? DateTime.now().toIso8601String()),
-        updatedAt: data['lastProfileUpdateAt'] != null 
-          ? DateTime.parse(data['lastProfileUpdateAt']) 
-          : DateTime.now(),
+        updatedAt: data['updatedAt'] != null 
+          ? DateTime.parse(data['updatedAt']) 
+          : (data['lastProfileUpdateAt'] != null 
+              ? DateTime.parse(data['lastProfileUpdateAt'])
+              : DateTime.now()),
       );
     } catch (e) {
+      print('[ERROR] ProfileService.uploadAvatar - Exception occurred');
+      print('[ERROR] ProfileService.uploadAvatar - Error: $e');
+      print('[ERROR] ProfileService.uploadAvatar - Error type: ${e.runtimeType}');
+      
+      if (e is DioException) {
+        print('[ERROR] ProfileService.uploadAvatar - DioException type: ${e.type}');
+        print('[ERROR] ProfileService.uploadAvatar - Response status: ${e.response?.statusCode}');
+        print('[ERROR] ProfileService.uploadAvatar - Response data: ${e.response?.data}');
+      }
+      
       throw _handleError(e);
     }
   }
@@ -430,13 +450,15 @@ class ProfileService {
         bio: data['bio'],
         avatarUrl: data['avatarUrl'],
         birthDate: data['dateOfBirth'] != null ? DateTime.parse(data['dateOfBirth']) : null,
-        location: data['location'],
+        location: _parseLocation(data['location']),
         interests: data['interests'] != null ? List<String>.from(data['interests']) : null,
         visibility: _parseVisibility(data['profileVisibility']),
         createdAt: DateTime.parse(data['createdAt'] ?? DateTime.now().toIso8601String()),
-        updatedAt: data['lastProfileUpdateAt'] != null 
-          ? DateTime.parse(data['lastProfileUpdateAt']) 
-          : DateTime.now(),
+        updatedAt: data['updatedAt'] != null 
+          ? DateTime.parse(data['updatedAt']) 
+          : (data['lastProfileUpdateAt'] != null 
+              ? DateTime.parse(data['lastProfileUpdateAt'])
+              : DateTime.now()),
       );
     } catch (e) {
       throw _handleError(e);
@@ -508,6 +530,21 @@ class ProfileService {
     } catch (e) {
       throw _handleError(e);
     }
+  }
+  
+  // location 필드 파싱 헬퍼 메서드
+  String? _parseLocation(dynamic locationData) {
+    if (locationData == null) return null;
+    
+    if (locationData is Map) {
+      // 백엔드가 객체로 반환하는 경우
+      return locationData['address'] as String?;
+    } else if (locationData is String) {
+      // 백엔드가 문자열로 반환하는 경우
+      return locationData;
+    }
+    
+    return null;
   }
   
   // ProfileVisibility 파싱 헬퍼 메서드

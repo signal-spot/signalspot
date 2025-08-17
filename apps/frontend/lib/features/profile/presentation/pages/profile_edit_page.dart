@@ -79,35 +79,55 @@ class _ProfileEditPageState extends ConsumerState<ProfileEditPage> {
     _lifeLessonController = TextEditingController();
     
     // 실제 프로필 데이터로 폼 초기화
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // 프로필 데이터가 이미 로드되어 있지 않으면 로드
       final profileState = ref.read(myProfileProvider);
-      profileState.whenData((profile) {
-        _nicknameController.text = profile.displayName ?? '';
-        _bioController.text = profile.bio ?? '';
-        _currentAvatarUrl = profile.avatarUrl;
+      
+      // 프로필 데이터가 없으면 다시 로드
+      if (!profileState.hasValue) {
+        await ref.read(myProfileProvider.notifier).loadProfile();
+      }
+      
+      // 프로필 데이터 적용
+      final updatedProfileState = ref.read(myProfileProvider);
+      updatedProfileState.whenData((profile) {
+        print('[DEBUG] ProfileEditPage - Loading profile data');
+        print('[DEBUG] ProfileEditPage - Avatar URL: ${profile.avatarUrl}');
+        
+        if (mounted) {
+          setState(() {
+            _nicknameController.text = profile.displayName ?? '';
+            _bioController.text = profile.bio ?? '';
+            _currentAvatarUrl = profile.avatarUrl;
+          });
+          
+          print('[DEBUG] ProfileEditPage - Current avatar URL set to: $_currentAvatarUrl');
 
-        // 편집 상태 업데이트
-        ref.read(profileEditStateProvider.notifier).state = {
-          'displayName': profile.displayName ?? '',
-          'bio': profile.bio ?? '',
-          'location': profile.location ?? '',
-          'interests': profile.interests ?? <String>[],
-          'avatarUrl': profile.avatarUrl,
-        };
+          // 편집 상태 업데이트
+          ref.read(profileEditStateProvider.notifier).state = {
+            'displayName': profile.displayName ?? '',
+            'bio': profile.bio ?? '',
+            'location': profile.location ?? '',
+            'interests': profile.interests ?? <String>[],
+            'avatarUrl': profile.avatarUrl,
+          };
+        }
       });
       
       // 시그니처 커넥션 데이터 로드
       final signaturePrefs = ref.read(signatureConnectionPreferencesProvider);
       signaturePrefs.whenData((prefs) {
-        if (prefs != null) {
-          _selectedMbti = prefs.mbti;
-          _mbtiController.text = prefs.mbti ?? '';
-          _memorablePlaceController.text = prefs.memorablePlace ?? '';
-          _childhoodMemoryController.text = prefs.childhoodMemory ?? '';
-          _turningPointController.text = prefs.turningPoint ?? '';
-          _proudestMomentController.text = prefs.proudestMoment ?? '';
-          _bucketListController.text = prefs.bucketList ?? '';
-          _lifeLessonController.text = prefs.lifeLesson ?? '';
+        if (prefs != null && mounted) {
+          setState(() {
+            _selectedMbti = prefs.mbti;
+            _mbtiController.text = prefs.mbti ?? '';
+            _memorablePlaceController.text = prefs.memorablePlace ?? '';
+            _childhoodMemoryController.text = prefs.childhoodMemory ?? '';
+            _turningPointController.text = prefs.turningPoint ?? '';
+            _proudestMomentController.text = prefs.proudestMoment ?? '';
+            _bucketListController.text = prefs.bucketList ?? '';
+            _lifeLessonController.text = prefs.lifeLesson ?? '';
+          });
           
           // 관심사 업데이트
           if (prefs.interests != null) {
@@ -262,89 +282,129 @@ class _ProfileEditPageState extends ConsumerState<ProfileEditPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 프로필 사진 영역
+              // 프로필 사진 영역 - Consumer로 실시간 상태 반영
               Center(
-                child: Stack(
-                  children: [
-                    Container(
-                      width: 120,
-                      height: 120,
-                      decoration: BoxDecoration(
-                        gradient: _currentAvatarUrl == null || _currentAvatarUrl!.isEmpty
-                            ? LinearGradient(
-                                colors: [
-                                  AppColors.primary.withOpacity(0.8),
-                                  AppColors.secondary.withOpacity(0.8),
-                                ],
-                              )
-                            : null,
-                        borderRadius: BorderRadius.circular(60),
-                        border: Border.all(
-                          color: AppColors.white,
-                          width: 4,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.black.withOpacity(0.1),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
+                child: Consumer(
+                  builder: (context, ref, _) {
+                    // 프로필 상태를 실시간으로 관찰
+                    final profileState = ref.watch(myProfileProvider);
+                    
+                    // 프로필에서 아바타 URL 가져오기 (currentAvatarUrl보다 우선)
+                    String? displayAvatarUrl = _currentAvatarUrl;
+                    profileState.whenData((profile) {
+                      // 프로필 데이터가 있고, _currentAvatarUrl이 아직 설정되지 않았다면
+                      if (displayAvatarUrl == null && profile.avatarUrl != null) {
+                        displayAvatarUrl = profile.avatarUrl;
+                        // 다음 프레임에서 상태 업데이트
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (mounted && _currentAvatarUrl == null) {
+                            setState(() {
+                              _currentAvatarUrl = profile.avatarUrl;
+                            });
+                          }
+                        });
+                      }
+                    });
+                    
+                    return Stack(
+                      children: [
+                        Container(
+                          width: 120,
+                          height: 120,
+                          decoration: BoxDecoration(
+                            gradient: displayAvatarUrl == null || displayAvatarUrl!.isEmpty
+                                ? LinearGradient(
+                                    colors: [
+                                      AppColors.primary.withOpacity(0.8),
+                                      AppColors.secondary.withOpacity(0.8),
+                                    ],
+                                  )
+                                : null,
+                            borderRadius: BorderRadius.circular(60),
+                            border: Border.all(
+                              color: AppColors.white,
+                              width: 4,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppColors.black.withOpacity(0.1),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                      child: ClipOval(
-                        child: _selectedImage != null
-                            ? Image.file(
-                                _selectedImage!,
-                                width: 120,
-                                height: 120,
-                                fit: BoxFit.cover,
-                              )
-                            : _currentAvatarUrl != null && _currentAvatarUrl!.isNotEmpty
-                                ? Image.network(
-                                    _currentAvatarUrl!,
+                          child: ClipOval(
+                            child: _selectedImage != null
+                                ? Image.file(
+                                    _selectedImage!,
                                     width: 120,
                                     height: 120,
                                     fit: BoxFit.cover,
-                                    errorBuilder: (context, error, stackTrace) => const Icon(
-                                      Icons.person,
-                                      size: 60,
-                                      color: AppColors.white,
-                                    ),
                                   )
-                                : const Icon(
-                                    Icons.person,
-                                    size: 60,
-                                    color: AppColors.white,
-                                  ),
-                      ),
-                    ),
-                    Positioned(
-                      right: 0,
-                      bottom: 0,
-                      child: GestureDetector(
-                        onTap: () {
-                          _showImagePickerOptions();
-                        },
-                        child: Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: AppColors.primary,
-                            borderRadius: BorderRadius.circular(18),
-                            border: Border.all(
-                              color: AppColors.white,
-                              width: 2,
-                            ),
-                          ),
-                          child: const Icon(
-                            Icons.camera_alt,
-                            color: AppColors.white,
-                            size: 20,
+                                : displayAvatarUrl != null && displayAvatarUrl!.isNotEmpty
+                                    ? Image.network(
+                                        displayAvatarUrl!,
+                                        width: 120,
+                                        height: 120,
+                                        fit: BoxFit.cover,
+                                        loadingBuilder: (context, child, loadingProgress) {
+                                          if (loadingProgress == null) return child;
+                                          return Center(
+                                            child: CircularProgressIndicator(
+                                              value: loadingProgress.expectedTotalBytes != null
+                                                  ? loadingProgress.cumulativeBytesLoaded /
+                                                      loadingProgress.expectedTotalBytes!
+                                                  : null,
+                                              strokeWidth: 2,
+                                              valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                                            ),
+                                          );
+                                        },
+                                        errorBuilder: (context, error, stackTrace) {
+                                          print('[DEBUG] ProfileEditPage - Error loading avatar: $error');
+                                          return const Icon(
+                                            Icons.person,
+                                            size: 60,
+                                            color: AppColors.white,
+                                          );
+                                        },
+                                      )
+                                    : const Icon(
+                                        Icons.person,
+                                        size: 60,
+                                        color: AppColors.white,
+                                      ),
                           ),
                         ),
-                      ),
-                    ),
-                  ],
+                        Positioned(
+                          right: 0,
+                          bottom: 0,
+                          child: GestureDetector(
+                            onTap: () {
+                              _showImagePickerOptions();
+                            },
+                            child: Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                color: AppColors.primary,
+                                borderRadius: BorderRadius.circular(18),
+                                border: Border.all(
+                                  color: AppColors.white,
+                                  width: 2,
+                                ),
+                              ),
+                              child: const Icon(
+                                Icons.camera_alt,
+                                color: AppColors.white,
+                                size: 20,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
               ),
 

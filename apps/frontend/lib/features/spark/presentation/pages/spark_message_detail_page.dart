@@ -11,6 +11,7 @@ import '../../../../shared/widgets/spark_send_modal.dart';
 import '../../../../shared/widgets/report_block_dialog.dart';
 import '../../../../shared/services/profile_service.dart';
 import '../../../../shared/services/user_service.dart';
+import '../../../../shared/models/user_profile.dart';
 
 class SparkMessageDetailPage extends ConsumerStatefulWidget {
   final String sparkId;
@@ -786,7 +787,7 @@ class _ProfileViewDialog extends StatefulWidget {
 
 class _ProfileViewDialogState extends State<_ProfileViewDialog> {
   final ProfileService _profileService = ProfileService();
-  Map<String, dynamic>? _profile;
+  UserProfile? _profile;
   bool _isLoading = true;
 
   @override
@@ -800,12 +801,7 @@ class _ProfileViewDialogState extends State<_ProfileViewDialog> {
       final profile = await _profileService.getUserProfile(widget.userId);
       if (mounted) {
         setState(() {
-          _profile = {
-            'nickname': profile.displayName ?? widget.userName,
-            'bio': profile.bio,
-            'avatarUrl': profile.avatarUrl,
-            'signatureConnection': profile.signatureConnection,
-          };
+          _profile = profile;
           _isLoading = false;
         });
       }
@@ -827,58 +823,59 @@ class _ProfileViewDialogState extends State<_ProfileViewDialog> {
       ),
       child: Container(
         padding: const EdgeInsets.all(AppSpacing.lg),
-        constraints: const BoxConstraints(maxWidth: 400),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // 헤더
-            Row(
-              children: [
-                // 프로필 이미지
-                CircleAvatar(
-                  radius: 30,
-                  backgroundColor: AppColors.primary.withOpacity(0.1),
-                  backgroundImage: _profile?['avatarUrl'] != null 
-                    ? NetworkImage(_profile!['avatarUrl']!)
-                    : null,
-                  child: _profile?['avatarUrl'] == null
-                    ? Text(
-                        widget.userName.isNotEmpty ? widget.userName[0].toUpperCase() : '?',
-                        style: AppTextStyles.headlineMedium.copyWith(
-                          color: AppColors.primary,
-                        ),
-                      )
-                    : null,
-                ),
-                const SizedBox(width: AppSpacing.md),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _profile?['nickname'] ?? widget.userName,
-                        style: AppTextStyles.titleLarge.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      if (_profile?['bio'] != null && _profile!['bio']!.isNotEmpty)
-                        Text(
-                          _profile!['bio']!,
-                          style: AppTextStyles.bodyMedium.copyWith(
-                            color: AppColors.grey600,
+        constraints: const BoxConstraints(maxWidth: 400, maxHeight: 600),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // 헤더
+              Row(
+                children: [
+                  // 프로필 이미지
+                  CircleAvatar(
+                    radius: 30,
+                    backgroundColor: AppColors.primary.withOpacity(0.1),
+                    backgroundImage: _profile?.avatarUrl != null 
+                      ? NetworkImage(_profile!.avatarUrl!)
+                      : null,
+                    child: _profile?.avatarUrl == null
+                      ? Text(
+                          widget.userName.isNotEmpty ? widget.userName[0].toUpperCase() : '?',
+                          style: AppTextStyles.headlineMedium.copyWith(
+                            color: AppColors.primary,
                           ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                    ],
+                        )
+                      : null,
                   ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close),
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
-              ],
-            ),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _profile?.displayName ?? widget.userName,
+                          style: AppTextStyles.titleLarge.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        if (_profile?.bio != null && _profile!.bio!.isNotEmpty)
+                          Text(
+                            _profile!.bio!,
+                            style: AppTextStyles.bodyMedium.copyWith(
+                              color: AppColors.grey600,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ],
+              ),
             
             const SizedBox(height: AppSpacing.lg),
             
@@ -887,8 +884,8 @@ class _ProfileViewDialogState extends State<_ProfileViewDialog> {
               const Center(
                 child: CircularProgressIndicator(),
               )
-            // 프로필 정보
-            else if (_profile != null && _profile!['signatureConnection'] != null) ...[
+            // 프로필 정보 - 항상 모든 필드 표시
+            else if (_profile != null) ...[
               // 시그니처 커넥션 정보
               Container(
                 decoration: BoxDecoration(
@@ -908,81 +905,97 @@ class _ProfileViewDialogState extends State<_ProfileViewDialog> {
                     ),
                     const SizedBox(height: AppSpacing.sm),
                     
-                    // MBTI
-                    if (_profile!['signatureConnection'].mbti != null) ...[
-                      _buildInfoRow(Icons.psychology, 'MBTI', _profile!['signatureConnection'].mbti!),
-                      const SizedBox(height: AppSpacing.xs),
-                    ],
+                    // MBTI - 항상 표시
+                    _buildInfoRow(
+                      Icons.psychology, 
+                      'MBTI', 
+                      _profile?.signatureConnection?.mbti,
+                      emptyText: '아직 작성되지 않았습니다'
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
                     
-                    // 관심사
-                    if (_profile!['signatureConnection'].interests != null && 
-                        _profile!['signatureConnection'].interests!.isNotEmpty) ...[
-                      _buildInfoRow(
-                        Icons.interests, 
-                        '관심사', 
-                        _profile!['signatureConnection'].interests!.join(', ')
-                      ),
-                      const SizedBox(height: AppSpacing.xs),
-                    ],
+                    // 관심사 - 항상 표시
+                    _buildInfoRow(
+                      Icons.interests, 
+                      '관심사', 
+                      (_profile?.signatureConnection?.interests != null && 
+                       _profile!.signatureConnection!.interests!.isNotEmpty)
+                        ? _profile!.signatureConnection!.interests!.join(', ')
+                        : null,
+                      emptyText: '아직 작성되지 않았습니다'
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
                     
-                    // 인생 영화
-                    if (_profile!['signatureConnection'].lifeMovie != null) ...[
-                      _buildInfoRow(Icons.movie, '인생 영화', _profile!['signatureConnection'].lifeMovie!),
-                      const SizedBox(height: AppSpacing.xs),
-                    ],
+                    // 인생 영화 - 항상 표시
+                    _buildInfoRow(
+                      Icons.movie, 
+                      '인생 영화', 
+                      _profile?.signatureConnection?.lifeMovie,
+                      emptyText: '아직 작성되지 않았습니다'
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
                     
-                    // 좋아하는 아티스트
-                    if (_profile!['signatureConnection'].favoriteArtist != null) ...[
-                      _buildInfoRow(Icons.music_note, '좋아하는 아티스트', _profile!['signatureConnection'].favoriteArtist!),
-                      const SizedBox(height: AppSpacing.xs),
-                    ],
+                    // 좋아하는 아티스트 - 항상 표시
+                    _buildInfoRow(
+                      Icons.music_note, 
+                      '좋아하는 아티스트', 
+                      _profile?.signatureConnection?.favoriteArtist,
+                      emptyText: '아직 작성되지 않았습니다'
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
                     
-                    // 기억에 남는 장소
-                    if (_profile!['signatureConnection'].memorablePlace != null) ...[
-                      _buildInfoRow(
-                        Icons.place, 
-                        '기억에 남는 장소', 
-                        _profile!['signatureConnection'].memorablePlace!
-                      ),
-                      const SizedBox(height: AppSpacing.xs),
-                    ],
+                    // 기억에 남는 장소 - 항상 표시
+                    _buildInfoRow(
+                      Icons.place, 
+                      '기억에 남는 장소', 
+                      _profile?.signatureConnection?.memorablePlace,
+                      emptyText: '아직 작성되지 않았습니다'
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
                     
-                    // 어린 시절 추억
-                    if (_profile!['signatureConnection'].childhoodMemory != null) ...[
-                      _buildInfoRow(
-                        Icons.child_care, 
-                        '어린 시절 추억', 
-                        _profile!['signatureConnection'].childhoodMemory!
-                      ),
-                      const SizedBox(height: AppSpacing.xs),
-                    ],
+                    // 어린 시절 추억 - 항상 표시
+                    _buildInfoRow(
+                      Icons.child_care, 
+                      '어린 시절 추억', 
+                      _profile?.signatureConnection?.childhoodMemory,
+                      emptyText: '아직 작성되지 않았습니다'
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
                     
-                    // 인생의 전환점
-                    if (_profile!['signatureConnection'].turningPoint != null) ...[
-                      _buildInfoRow(Icons.change_circle, '인생의 전환점', _profile!['signatureConnection'].turningPoint!),
-                      const SizedBox(height: AppSpacing.xs),
-                    ],
+                    // 인생의 전환점 - 항상 표시
+                    _buildInfoRow(
+                      Icons.change_circle, 
+                      '인생의 전환점', 
+                      _profile?.signatureConnection?.turningPoint,
+                      emptyText: '아직 작성되지 않았습니다'
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
                     
-                    // 가장 자랑스러운 순간
-                    if (_profile!['signatureConnection'].proudestMoment != null) ...[
-                      _buildInfoRow(Icons.star, '가장 자랑스러운 순간', _profile!['signatureConnection'].proudestMoment!),
-                      const SizedBox(height: AppSpacing.xs),
-                    ],
+                    // 가장 자랑스러운 순간 - 항상 표시
+                    _buildInfoRow(
+                      Icons.star, 
+                      '가장 자랑스러운 순간', 
+                      _profile?.signatureConnection?.proudestMoment,
+                      emptyText: '아직 작성되지 않았습니다'
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
                     
-                    // 버킷리스트
-                    if (_profile!['signatureConnection'].bucketList != null) ...[
-                      _buildInfoRow(Icons.checklist, '버킷리스트', _profile!['signatureConnection'].bucketList!),
-                      const SizedBox(height: AppSpacing.xs),
-                    ],
+                    // 버킷리스트 - 항상 표시
+                    _buildInfoRow(
+                      Icons.checklist, 
+                      '버킷리스트', 
+                      _profile?.signatureConnection?.bucketList,
+                      emptyText: '아직 작성되지 않았습니다'
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
                     
-                    // 인생 교훈
-                    if (_profile!['signatureConnection'].lifeLesson != null) ...[
-                      _buildInfoRow(
-                        Icons.school, 
-                        '인생 교훈', 
-                        _profile!['signatureConnection'].lifeLesson!
-                      ),
-                    ],
+                    // 인생 교훈 - 항상 표시
+                    _buildInfoRow(
+                      Icons.school, 
+                      '인생 교훈', 
+                      _profile?.signatureConnection?.lifeLesson,
+                      emptyText: '아직 작성되지 않았습니다'
+                    ),
                   ],
                 ),
               ),
@@ -1018,17 +1031,20 @@ class _ProfileViewDialogState extends State<_ProfileViewDialog> {
           ],
         ),
       ),
+      ),
     );
   }
 
-  Widget _buildInfoRow(IconData icon, String label, String value) {
+  Widget _buildInfoRow(IconData icon, String label, String? value, {String emptyText = '정보 없음'}) {
+    final hasValue = value != null && value.isNotEmpty;
+    
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Icon(
           icon,
           size: 16,
-          color: AppColors.grey600,
+          color: hasValue ? AppColors.grey600 : AppColors.grey400,
         ),
         const SizedBox(width: AppSpacing.xs),
         Expanded(
@@ -1038,15 +1054,16 @@ class _ProfileViewDialogState extends State<_ProfileViewDialog> {
               children: [
                 TextSpan(
                   text: '$label: ',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.w600,
-                    color: AppColors.textSecondary,
+                    color: hasValue ? AppColors.textSecondary : AppColors.grey500,
                   ),
                 ),
                 TextSpan(
-                  text: value,
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
+                  text: hasValue ? value : emptyText,
+                  style: TextStyle(
+                    color: hasValue ? AppColors.textPrimary : AppColors.grey400,
+                    fontStyle: hasValue ? FontStyle.normal : FontStyle.italic,
                   ),
                 ),
               ],

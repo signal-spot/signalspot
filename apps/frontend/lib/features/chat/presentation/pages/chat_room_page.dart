@@ -11,8 +11,10 @@ import '../../../../features/auth/presentation/providers/auth_provider.dart';
 import '../../../../core/api/api_client.dart';
 import '../../../../shared/widgets/report_block_dialog.dart';
 import '../../../../shared/widgets/spark_icon.dart';
+import '../../../../shared/widgets/spark_send_modal.dart';
 import '../../../../shared/services/profile_service.dart';
 import '../../../../shared/services/report_service.dart';
+import '../../../../shared/services/spark_service.dart';
 
 class ChatRoomPage extends ConsumerStatefulWidget {
   final String roomId;
@@ -991,70 +993,84 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
                     
                     const SizedBox(height: AppSpacing.lg),
                     
-                    // 시그니처 커넥션 정보
-                    if (profile.signatureConnection != null) ...[
-                      _buildProfileSection(
-                        title: '시그니처 커넥션',
-                        children: [
-                          if (profile.signatureConnection!.mbti != null)
-                            _buildInfoRow('MBTI', profile.signatureConnection!.mbti!),
-                          if (profile.signatureConnection!.interests != null && 
-                              profile.signatureConnection!.interests!.isNotEmpty)
-                            _buildInfoRow('관심사', profile.signatureConnection!.interests!.join(', ')),
-                          if (profile.signatureConnection!.memorablePlace != null)
-                            _buildInfoRow('기억에 남는 장소', profile.signatureConnection!.memorablePlace!),
-                          if (profile.signatureConnection!.childhoodMemory != null)
-                            _buildInfoRow('어린 시절 추억', profile.signatureConnection!.childhoodMemory!),
-                          if (profile.signatureConnection!.turningPoint != null)
-                            _buildInfoRow('인생의 전환점', profile.signatureConnection!.turningPoint!),
-                          if (profile.signatureConnection!.proudestMoment != null)
-                            _buildInfoRow('가장 자랑스러운 순간', profile.signatureConnection!.proudestMoment!),
-                          if (profile.signatureConnection!.bucketList != null)
-                            _buildInfoRow('버킷리스트', profile.signatureConnection!.bucketList!),
-                          if (profile.signatureConnection!.lifeLesson != null)
-                            _buildInfoRow('인생 교훈', profile.signatureConnection!.lifeLesson!),
-                        ],
-                      ),
-                      const SizedBox(height: AppSpacing.lg),
-                    ] else ...[
-                      // 시그니처 커넥션 정보가 없을 때
-                      Container(
-                        padding: const EdgeInsets.all(AppSpacing.lg),
-                        decoration: BoxDecoration(
-                          color: AppColors.grey100,
-                          borderRadius: BorderRadius.circular(12),
+                    // 시그니처 커넥션 정보 (항상 표시)
+                    _buildProfileSection(
+                      title: '시그니처 커넥션',
+                      children: [
+                        // MBTI (항상 표시)
+                        _buildInfoRow(
+                          'MBTI', 
+                          profile.signatureConnection?.mbti,
+                          emptyText: 'MBTI가 설정되지 않았습니다',
                         ),
-                        child: Center(
-                          child: Text(
-                            '시그니처 커넥션 정보가 없습니다',
-                            style: AppTextStyles.bodyMedium.copyWith(
-                              color: AppColors.textSecondary,
-                            ),
+                        // 관심사 (항상 표시)
+                        _buildInfoRow(
+                          '관심사', 
+                          profile.signatureConnection?.interests != null && 
+                              profile.signatureConnection!.interests!.isNotEmpty
+                              ? profile.signatureConnection!.interests!.join(', ')
+                              : null,
+                          emptyText: '관심사가 설정되지 않았습니다',
+                        ),
+                        // 나의 이야기 섹션
+                        const SizedBox(height: AppSpacing.sm),
+                        Text(
+                          '나의 이야기',
+                          style: AppTextStyles.labelMedium.copyWith(
+                            color: AppColors.grey700,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
-                      ),
-                      const SizedBox(height: AppSpacing.lg),
-                    ],
-                    
+                        const SizedBox(height: AppSpacing.xs),
+                        _buildInfoRow(
+                          '📍 기억에 남는 장소', 
+                          profile.signatureConnection?.memorablePlace,
+                          emptyText: '아직 작성되지 않았습니다',
+                        ),
+                        _buildInfoRow(
+                          '🧸 어린 시절 추억', 
+                          profile.signatureConnection?.childhoodMemory,
+                          emptyText: '아직 작성되지 않았습니다',
+                        ),
+                        _buildInfoRow(
+                          '🔄 인생의 전환점', 
+                          profile.signatureConnection?.turningPoint,
+                          emptyText: '아직 작성되지 않았습니다',
+                        ),
+                        _buildInfoRow(
+                          '🏆 가장 자랑스러운 순간', 
+                          profile.signatureConnection?.proudestMoment,
+                          emptyText: '아직 작성되지 않았습니다',
+                        ),
+                        _buildInfoRow(
+                          '🎯 버킷리스트', 
+                          profile.signatureConnection?.bucketList,
+                          emptyText: '아직 작성되지 않았습니다',
+                        ),
+                        _buildInfoRow(
+                          '💡 인생 교훈', 
+                          profile.signatureConnection?.lifeLesson,
+                          emptyText: '아직 작성되지 않았습니다',
+                        ),
+                      ],
+                    ),
                     const SizedBox(height: AppSpacing.lg),
                     
                     // 닫기 버튼
                     SizedBox(
                       width: double.infinity,
-                      child: ElevatedButton(
+                      child: TextButton(
                         onPressed: () => Navigator.pop(context),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
+                        style: TextButton.styleFrom(
                           padding: const EdgeInsets.symmetric(
                             vertical: AppSpacing.md,
                           ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
                         ),
-                        child: const Text(
+                        child: Text(
                           '닫기',
-                          style: TextStyle(color: Colors.white),
+                          style: AppTextStyles.bodyMedium.copyWith(
+                            color: AppColors.grey600,
+                          ),
                         ),
                       ),
                     ),
@@ -1108,7 +1124,9 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
     );
   }
   
-  Widget _buildInfoRow(String label, String value) {
+  Widget _buildInfoRow(String label, String? value, {String emptyText = '정보 없음'}) {
+    final hasValue = value != null && value.isNotEmpty;
+    
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
       child: Row(
@@ -1119,18 +1137,37 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
             child: Text(
               label,
               style: AppTextStyles.bodySmall.copyWith(
-                color: AppColors.grey600,
+                color: hasValue ? AppColors.grey600 : AppColors.grey500,
               ),
             ),
           ),
           Expanded(
-            child: Text(
-              value,
-              style: AppTextStyles.bodySmall.copyWith(
-                color: AppColors.grey800,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
+            child: hasValue
+              ? Text(
+                  value,
+                  style: AppTextStyles.bodySmall.copyWith(
+                    color: AppColors.grey800,
+                    fontWeight: FontWeight.w500,
+                  ),
+                )
+              : Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.sm,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.grey100,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    emptyText,
+                    style: AppTextStyles.bodySmall.copyWith(
+                      color: AppColors.grey500,
+                      fontStyle: FontStyle.italic,
+                      fontSize: 11,
+                    ),
+                  ),
+                ),
           ),
         ],
       ),

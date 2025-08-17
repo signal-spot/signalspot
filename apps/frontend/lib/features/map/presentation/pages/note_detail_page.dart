@@ -1482,32 +1482,67 @@ class _NoteDetailPageState extends ConsumerState<NoteDetailPage>
                     
                     const SizedBox(height: AppSpacing.lg),
                     
-                    // 시그니처 커넥션 정보
-                    if (profile.signatureConnection != null) ...[
-                      _buildProfileSection(
-                        title: '시그니처 커넥션',
-                        children: [
-                          if (profile.signatureConnection!.mbti != null)
-                            _buildInfoRow('MBTI', profile.signatureConnection!.mbti!),
-                          if (profile.signatureConnection!.interests != null && 
-                              profile.signatureConnection!.interests!.isNotEmpty)
-                            _buildInfoRow('관심사', profile.signatureConnection!.interests!.join(', ')),
-                          if (profile.signatureConnection!.memorablePlace != null)
-                            _buildInfoRow('기억에 남는 장소', profile.signatureConnection!.memorablePlace!),
-                          if (profile.signatureConnection!.childhoodMemory != null)
-                            _buildInfoRow('어린 시절 추억', profile.signatureConnection!.childhoodMemory!),
-                          if (profile.signatureConnection!.turningPoint != null)
-                            _buildInfoRow('인생의 전환점', profile.signatureConnection!.turningPoint!),
-                          if (profile.signatureConnection!.proudestMoment != null)
-                            _buildInfoRow('가장 자랑스러운 순간', profile.signatureConnection!.proudestMoment!),
-                          if (profile.signatureConnection!.bucketList != null)
-                            _buildInfoRow('버킷리스트', profile.signatureConnection!.bucketList!),
-                          if (profile.signatureConnection!.lifeLesson != null)
-                            _buildInfoRow('인생 교훈', profile.signatureConnection!.lifeLesson!),
-                        ],
-                      ),
-                      const SizedBox(height: AppSpacing.lg),
-                    ],
+                    // 시그니처 커넥션 정보 - 항상 모든 필드 표시
+                    _buildProfileSection(
+                      title: '시그니처 커넥션',
+                      children: [
+                        _buildInfoRow(
+                          'MBTI', 
+                          profile.signatureConnection?.mbti ?? '아직 작성되지 않았습니다',
+                          isEmpty: profile.signatureConnection?.mbti == null
+                        ),
+                        _buildInfoRow(
+                          '관심사', 
+                          (profile.signatureConnection?.interests != null && 
+                           profile.signatureConnection!.interests!.isNotEmpty)
+                              ? profile.signatureConnection!.interests!.join(', ')
+                              : '아직 작성되지 않았습니다',
+                          isEmpty: profile.signatureConnection?.interests == null || 
+                                   profile.signatureConnection!.interests!.isEmpty
+                        ),
+                        _buildInfoRow(
+                          '인생 영화',
+                          profile.signatureConnection?.lifeMovie ?? '아직 작성되지 않았습니다',
+                          isEmpty: profile.signatureConnection?.lifeMovie == null
+                        ),
+                        _buildInfoRow(
+                          '좋아하는 아티스트',
+                          profile.signatureConnection?.favoriteArtist ?? '아직 작성되지 않았습니다',
+                          isEmpty: profile.signatureConnection?.favoriteArtist == null
+                        ),
+                        _buildInfoRow(
+                          '기억에 남는 장소',
+                          profile.signatureConnection?.memorablePlace ?? '아직 작성되지 않았습니다',
+                          isEmpty: profile.signatureConnection?.memorablePlace == null
+                        ),
+                        _buildInfoRow(
+                          '어린 시절 추억',
+                          profile.signatureConnection?.childhoodMemory ?? '아직 작성되지 않았습니다',
+                          isEmpty: profile.signatureConnection?.childhoodMemory == null
+                        ),
+                        _buildInfoRow(
+                          '인생의 전환점',
+                          profile.signatureConnection?.turningPoint ?? '아직 작성되지 않았습니다',
+                          isEmpty: profile.signatureConnection?.turningPoint == null
+                        ),
+                        _buildInfoRow(
+                          '가장 자랑스러운 순간',
+                          profile.signatureConnection?.proudestMoment ?? '아직 작성되지 않았습니다',
+                          isEmpty: profile.signatureConnection?.proudestMoment == null
+                        ),
+                        _buildInfoRow(
+                          '버킷리스트',
+                          profile.signatureConnection?.bucketList ?? '아직 작성되지 않았습니다',
+                          isEmpty: profile.signatureConnection?.bucketList == null
+                        ),
+                        _buildInfoRow(
+                          '인생 교훈',
+                          profile.signatureConnection?.lifeLesson ?? '아직 작성되지 않았습니다',
+                          isEmpty: profile.signatureConnection?.lifeLesson == null
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
                     
                     const SizedBox(height: AppSpacing.lg),
                     
@@ -1581,7 +1616,7 @@ class _NoteDetailPageState extends ConsumerState<NoteDetailPage>
     );
   }
   
-  Widget _buildInfoRow(String label, String value) {
+  Widget _buildInfoRow(String label, String value, {bool isEmpty = false}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
       child: Row(
@@ -1592,7 +1627,7 @@ class _NoteDetailPageState extends ConsumerState<NoteDetailPage>
             child: Text(
               label,
               style: AppTextStyles.bodySmall.copyWith(
-                color: AppColors.grey600,
+                color: isEmpty ? AppColors.grey500 : AppColors.grey600,
               ),
             ),
           ),
@@ -1600,8 +1635,9 @@ class _NoteDetailPageState extends ConsumerState<NoteDetailPage>
             child: Text(
               value,
               style: AppTextStyles.bodySmall.copyWith(
-                color: AppColors.grey800,
-                fontWeight: FontWeight.w500,
+                color: isEmpty ? AppColors.grey400 : AppColors.grey800,
+                fontWeight: isEmpty ? FontWeight.normal : FontWeight.w500,
+                fontStyle: isEmpty ? FontStyle.italic : FontStyle.normal,
               ),
             ),
           ),

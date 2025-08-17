@@ -713,83 +713,143 @@ class _ProfilePageState extends ConsumerState<ProfilePage>
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // MBTI 표시
-                  if (preferences.mbti != null) ...[
-                    _buildSectionTitle('MBTI'),
-                    const SizedBox(height: AppSpacing.sm),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.lg,
-                        vertical: AppSpacing.sm,
+                  // MBTI 표시 (항상 표시)
+                  _buildSectionTitle('MBTI'),
+                  const SizedBox(height: AppSpacing.sm),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.lg,
+                      vertical: AppSpacing.sm,
+                    ),
+                    decoration: BoxDecoration(
+                      gradient: preferences.mbti != null 
+                        ? LinearGradient(
+                            colors: [
+                              AppColors.primary.withOpacity(0.1),
+                              AppColors.secondary.withOpacity(0.1),
+                            ],
+                          )
+                        : null,
+                      color: preferences.mbti == null ? AppColors.grey100 : null,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: preferences.mbti != null 
+                          ? AppColors.primary.withOpacity(0.3)
+                          : AppColors.grey300,
                       ),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            AppColors.primary.withOpacity(0.1),
-                            AppColors.secondary.withOpacity(0.1),
+                    ),
+                    child: preferences.mbti != null
+                      ? Text(
+                          preferences.mbti!,
+                          style: AppTextStyles.titleMedium.copyWith(
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        )
+                      : Row(
+                          children: [
+                            Icon(Icons.info_outline, 
+                              size: 16, 
+                              color: AppColors.grey500
+                            ),
+                            const SizedBox(width: AppSpacing.sm),
+                            Text(
+                              'MBTI가 설정되지 않았습니다',
+                              style: AppTextStyles.bodyMedium.copyWith(
+                                color: AppColors.grey500,
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
                           ],
                         ),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: AppColors.primary.withOpacity(0.3),
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  
+                  // 관심사 표시 (항상 표시)
+                  _buildSectionTitle('관심사'),
+                  const SizedBox(height: AppSpacing.sm),
+                  preferences.interests != null && preferences.interests!.isNotEmpty
+                    ? Wrap(
+                        spacing: AppSpacing.sm,
+                        runSpacing: AppSpacing.sm,
+                        children: preferences.interests!
+                            .map((interest) => _buildInterestChip(interest))
+                            .toList(),
+                      )
+                    : Container(
+                        padding: const EdgeInsets.all(AppSpacing.md),
+                        decoration: BoxDecoration(
+                          color: AppColors.grey100,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: AppColors.grey300,
+                            style: BorderStyle.solid,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.add_circle_outline, 
+                              color: AppColors.grey500,
+                              size: 20,
+                            ),
+                            const SizedBox(width: AppSpacing.sm),
+                            Text(
+                              '관심사를 추가해주세요',
+                              style: AppTextStyles.bodyMedium.copyWith(
+                                color: AppColors.grey500,
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      child: Text(
-                        preferences.mbti!,
-                        style: AppTextStyles.titleMedium.copyWith(
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.w600,
+                  const SizedBox(height: AppSpacing.lg),
+                  
+                  // 개인 이야기 표시 (항상 표시)
+                  _buildSectionTitle('나의 이야기'),
+                  const SizedBox(height: AppSpacing.sm),
+                  Container(
+                    padding: const EdgeInsets.all(AppSpacing.md),
+                    decoration: BoxDecoration(
+                      color: AppColors.grey50,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildStoryItem(
+                          '📍', 
+                          '기억에 남는 장소', 
+                          preferences.memorablePlace,
                         ),
-                      ),
+                        _buildStoryItem(
+                          '🧸', 
+                          '어린 시절 추억', 
+                          preferences.childhoodMemory,
+                        ),
+                        _buildStoryItem(
+                          '🔄', 
+                          '인생의 터닝포인트', 
+                          preferences.turningPoint,
+                        ),
+                        _buildStoryItem(
+                          '🏆', 
+                          '가장 자랑스러운 순간', 
+                          preferences.proudestMoment,
+                        ),
+                        _buildStoryItem(
+                          '🎯', 
+                          '버킷리스트', 
+                          preferences.bucketList,
+                        ),
+                        _buildStoryItem(
+                          '💡', 
+                          '인생의 교훈', 
+                          preferences.lifeLesson,
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: AppSpacing.lg),
-                  ],
-                  
-                  // 관심사 표시
-                  if (preferences.interests != null && preferences.interests!.isNotEmpty) ...[
-                    _buildSectionTitle('관심사'),
-                    const SizedBox(height: AppSpacing.sm),
-                    Wrap(
-                      spacing: AppSpacing.sm,
-                      runSpacing: AppSpacing.sm,
-                      children: preferences.interests!
-                          .map((interest) => _buildInterestChip(interest))
-                          .toList(),
-                    ),
-                    const SizedBox(height: AppSpacing.lg),
-                  ],
-                  
-                  // 개인 이야기 표시
-                  if (preferences.memorablePlace != null || 
-                      preferences.childhoodMemory != null ||
-                      preferences.turningPoint != null) ...[
-                    _buildSectionTitle('나의 이야기'),
-                    const SizedBox(height: AppSpacing.sm),
-                    Container(
-                      padding: const EdgeInsets.all(AppSpacing.md),
-                      decoration: BoxDecoration(
-                        color: AppColors.grey50,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (preferences.memorablePlace != null)
-                            _buildStoryItem('📍', '기억에 남는 장소', preferences.memorablePlace!),
-                          if (preferences.childhoodMemory != null)
-                            _buildStoryItem('🧸', '어린 시절 추억', preferences.childhoodMemory!),
-                          if (preferences.turningPoint != null)
-                            _buildStoryItem('🔄', '인생의 터닝포인트', preferences.turningPoint!),
-                          if (preferences.proudestMoment != null)
-                            _buildStoryItem('🏆', '가장 자랑스러운 순간', preferences.proudestMoment!),
-                          if (preferences.bucketList != null)
-                            _buildStoryItem('🎯', '버킷리스트', preferences.bucketList!),
-                          if (preferences.lifeLesson != null)
-                            _buildStoryItem('💡', '인생의 교훈', preferences.lifeLesson!),
-                        ],
-                      ),
-                    ),
-                  ],
+                  ),
                 ],
               );
             },
@@ -871,13 +931,30 @@ class _ProfilePageState extends ConsumerState<ProfilePage>
     );
   }
   
-  Widget _buildStoryItem(String emoji, String title, String content) {
+  Widget _buildStoryItem(String emoji, String title, String? content) {
+    final hasContent = content != null && content.isNotEmpty;
+    
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.md),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(emoji, style: TextStyle(fontSize: 20)),
+          Container(
+            width: 24,
+            height: 24,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: hasContent ? Colors.transparent : AppColors.grey100,
+              shape: BoxShape.circle,
+            ),
+            child: Text(
+              emoji, 
+              style: TextStyle(
+                fontSize: hasContent ? 20 : 16,
+                color: hasContent ? null : AppColors.grey400,
+              ),
+            ),
+          ),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Column(
@@ -886,16 +963,46 @@ class _ProfilePageState extends ConsumerState<ProfilePage>
                 Text(
                   title,
                   style: AppTextStyles.labelSmall.copyWith(
-                    color: AppColors.grey600,
+                    color: hasContent ? AppColors.grey600 : AppColors.grey500,
+                    fontWeight: hasContent ? FontWeight.w500 : FontWeight.w400,
                   ),
                 ),
                 const SizedBox(height: 2),
-                Text(
-                  content,
-                  style: AppTextStyles.bodyMedium.copyWith(
-                    color: AppColors.grey900,
-                  ),
-                ),
+                hasContent
+                  ? Text(
+                      content,
+                      style: AppTextStyles.bodyMedium.copyWith(
+                        color: AppColors.grey900,
+                      ),
+                    )
+                  : Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.sm,
+                        vertical: AppSpacing.xs,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.grey100,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.edit_note,
+                            size: 14,
+                            color: AppColors.grey500,
+                          ),
+                          const SizedBox(width: AppSpacing.xs),
+                          Text(
+                            '아직 작성되지 않았습니다',
+                            style: AppTextStyles.bodySmall.copyWith(
+                              color: AppColors.grey500,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
               ],
             ),
           ),
