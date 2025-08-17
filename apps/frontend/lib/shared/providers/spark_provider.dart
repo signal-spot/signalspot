@@ -59,20 +59,26 @@ class MySparkListNotifier extends StateNotifier<AsyncValue<List<Spark>>> {
       final updatedSpark = await _sparkService.acceptSpark(sparkId);
       
       // 현재 리스트 업데이트 (즉시 UI 반영)
-      state = state.whenData((sparks) {
+      state.whenData((sparks) {
         final updatedList = sparks.map((spark) {
           if (spark.id == sparkId) {
             return updatedSpark;
           }
           return spark;
         }).toList();
-        return updatedList;
+        state = AsyncValue.data(updatedList);
       });
       
       // 백그라운드에서 전체 목록 새로고침
-      loadSparks();
+      Future.delayed(const Duration(milliseconds: 500), () {
+        loadSparks();
+      });
     } catch (error, stackTrace) {
-      state = AsyncValue.error(error, stackTrace);
+      print('Error accepting spark: $error');
+      print('Stack trace: $stackTrace');
+      // 에러가 발생해도 전체 상태를 error로 바꾸지 않고, 리스트 새로고침 시도
+      await loadSparks();
+      rethrow; // 에러는 던지되, state는 유지
     }
   }
   
@@ -82,20 +88,26 @@ class MySparkListNotifier extends StateNotifier<AsyncValue<List<Spark>>> {
       final updatedSpark = await _sparkService.rejectSpark(sparkId);
       
       // 현재 리스트 업데이트 (즉시 UI 반영)
-      state = state.whenData((sparks) {
+      state.whenData((sparks) {
         final updatedList = sparks.map((spark) {
           if (spark.id == sparkId) {
             return updatedSpark;
           }
           return spark;
         }).toList();
-        return updatedList;
+        state = AsyncValue.data(updatedList);
       });
       
-      // 백그라운드에서 전체 목록 새로고침  
-      loadSparks();
+      // 백그라운드에서 전체 목록 새로고침
+      Future.delayed(const Duration(milliseconds: 500), () {
+        loadSparks();
+      });
     } catch (error, stackTrace) {
-      state = AsyncValue.error(error, stackTrace);
+      print('Error rejecting spark: $error');
+      print('Stack trace: $stackTrace');
+      // 에러가 발생해도 전체 상태를 error로 바꾸지 않고, 리스트 새로고침 시도
+      await loadSparks();
+      rethrow; // 에러는 던지되, state는 유지
     }
   }
 }

@@ -415,6 +415,115 @@ export class NotificationService implements OnModuleInit {
     }
   }
 
+  @OnEvent('spark.partiallyAccepted')
+  async handleSparkAccepted(data: {
+    sparkId: string;
+    acceptedBy: string;
+    waitingFor: string;
+  }): Promise<void> {
+    try {
+      // Get users information
+      const acceptedUser = await this.userRepository.findOne({ id: data.acceptedBy });
+      const waitingUser = await this.userRepository.findOne({ id: data.waitingFor });
+      
+      if (!acceptedUser || !waitingUser) {
+        this.logger.error('Users not found for spark accepted event', null, 'NotificationService');
+        return;
+      }
+
+      // Notify the user who is still pending
+      const notification: NotificationPayload = {
+        title: '✨ 스파크 수락!',
+        body: `${acceptedUser.username}님이 스파크를 수락했어요! 당신의 선택을 기다리고 있어요.`,
+        type: NotificationType.SPARK_ACCEPTED,
+        userId: data.waitingFor,
+        priority: 'high',
+        data: {
+          sparkId: data.sparkId,
+          acceptedByUserId: data.acceptedBy,
+          acceptedByUsername: acceptedUser.username,
+        },
+      };
+
+      await this.sendNotification(notification);
+      this.logger.log(`Sent spark accepted notification to user ${data.waitingFor}`, 'NotificationService');
+    } catch (error) {
+      this.logger.error('Error handling spark accepted event', error.stack, 'NotificationService');
+    }
+  }
+
+  @OnEvent('spark.rejected')
+  async handleSparkRejected(data: {
+    sparkId: string;
+    rejectedBy: string;
+    otherUserId: string;
+  }): Promise<void> {
+    try {
+      // Get user information
+      const rejectedUser = await this.userRepository.findOne({ id: data.rejectedBy });
+      
+      if (!rejectedUser) {
+        this.logger.error('User not found for spark rejected event', null, 'NotificationService');
+        return;
+      }
+
+      // Notify the other user about rejection
+      const notification: NotificationPayload = {
+        title: '💔 스파크가 거절되었어요',
+        body: `아쉽게도 스파크가 성사되지 않았어요. 새로운 인연을 찾아보세요!`,
+        type: NotificationType.SPARK_REJECTED,
+        userId: data.otherUserId,
+        priority: 'normal',
+        data: {
+          sparkId: data.sparkId,
+          rejectedByUserId: data.rejectedBy,
+        },
+      };
+
+      await this.sendNotification(notification);
+      this.logger.log(`Sent spark rejected notification to user ${data.otherUserId}`, 'NotificationService');
+    } catch (error) {
+      this.logger.error('Error handling spark rejected event', error.stack, 'NotificationService');
+    }
+  }
+
+  @OnEvent('spark.sent')
+  async handleManualSparkSent(spark: Spark): Promise<void> {
+    try {
+      this.logger.log('Handling manual spark sent event', 'NotificationService');
+      
+      // Get receiver information
+      const receiver = await this.userRepository.findOne({ id: spark.user2.id });
+      const sender = await this.userRepository.findOne({ id: spark.user1.id });
+      
+      if (!receiver || !sender) {
+        this.logger.error('Users not found for manual spark event', null, 'NotificationService');
+        return;
+      }
+
+      // Send notification to receiver
+      const notification: NotificationPayload = {
+        title: '✨ 새로운 스파크!',
+        body: `${sender.username}님이 당신에게 스파크를 보냈어요! 확인해보세요.`,
+        type: NotificationType.SPARK_DETECTED, // Use existing type for manual sparks
+        userId: receiver.id,
+        priority: 'high',
+        data: {
+          sparkId: spark.id,
+          senderId: sender.id,
+          senderUsername: sender.username,
+          sparkType: 'manual',
+          message: spark.message || '',
+        },
+      };
+
+      const result = await this.sendNotification(notification);
+      this.logger.log(`Manual spark notification sent to ${receiver.username}: ${result}`, 'NotificationService');
+    } catch (error) {
+      this.logger.error('Error handling manual spark sent event', error.stack, 'NotificationService');
+    }
+  }
+
   @OnEvent('message.received')
   async handleMessageReceived(data: {
     senderId: string;
@@ -647,10 +756,65 @@ export class NotificationService implements OnModuleInit {
     }
   }
 
+  async resetUserBadge(userId: string): Promise<boolean> {
+    try {
+      this.logger.debug(`Resetting badge for user ${userId}`, 'NotificationService');
+      
+      // Check if Firebase Admin is available
+      if (!admin || !this.firebaseApp) {
+        this.logger.warn('Firebase Admin SDK not initialized, skipping badge reset', 'NotificationService');
+        return false;
+      }
+      
+      const user = await this.userRepository.findOne({ id: userId });
+      
+      if (!user?.fcmToken) {
+        this.logger.debug(`No FCM token found for user ${userId}`, 'NotificationService');
+        return false;
+      }
+      
+      // Send silent push to reset badge only
+      const message: any = {
+        token: user.fcmToken,
+        // iOS: Silent push with badge reset
+        apns: {
+          payload: {
+            aps: {
+              badge: 0,
+              contentAvailable: true, // Silent push
+            }
+          }
+        },
+        // Android: Data-only message with badge reset
+        android: {
+          priority: 'high',
+          data: {
+            badge: '0',
+            type: 'badge_reset'
+          }
+        },
+        // Include data for both platforms
+        data: {
+          badge: '0',
+          type: 'badge_reset'
+        }
+      };
+      
+      const response = await admin.messaging().send(message);
+      this.logger.log(`Badge reset sent successfully for user ${userId}: ${response}`, 'NotificationService');
+      return true;
+    } catch (error) {
+      this.logger.error('Failed to reset user badge', error.stack, 'NotificationService');
+      return false;
+    }
+  }
+
   private getNotificationChannelId(type: NotificationType): string {
     switch (type) {
       case NotificationType.SPARK_DETECTED:
       case NotificationType.SPARK_MATCHED:
+      case NotificationType.SPARK_ACCEPTED:
+      case NotificationType.SPARK_REJECTED:
         return 'sparks';
       case NotificationType.MESSAGE_RECEIVED:
         return 'messages';

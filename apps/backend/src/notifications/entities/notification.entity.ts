@@ -5,6 +5,8 @@ import { User } from '../../entities/user.entity';
 export enum NotificationType {
   SPARK_DETECTED = 'spark_detected',
   SPARK_MATCHED = 'spark_matched',
+  SPARK_ACCEPTED = 'spark_accepted',
+  SPARK_REJECTED = 'spark_rejected',
   MESSAGE_RECEIVED = 'message_received',
   SIGNAL_SPOT_NEARBY = 'signal_spot_nearby',
   SACRED_SITE_DISCOVERED = 'sacred_site_discovered',
@@ -209,6 +211,8 @@ export class Notification {
     switch (this.type) {
       case NotificationType.SPARK_DETECTED:
       case NotificationType.SPARK_MATCHED:
+      case NotificationType.SPARK_ACCEPTED:
+      case NotificationType.SPARK_REJECTED:
         return 'sparks';
       case NotificationType.MESSAGE_RECEIVED:
         return 'messages';

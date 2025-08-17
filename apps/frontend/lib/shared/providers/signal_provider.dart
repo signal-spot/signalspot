@@ -14,6 +14,8 @@ final nearbySignalSpotsProvider = StateNotifierProvider<NearbySignalSpotsNotifie
 
 class NearbySignalSpotsNotifier extends StateNotifier<AsyncValue<SignalSpotListResponse>> {
   final SignalService _signalService;
+  DateTime? _lastLoadTime;
+  String? _lastLoadKey;
   
   NearbySignalSpotsNotifier(this._signalService) : super(const AsyncValue.loading());
   
@@ -23,8 +25,25 @@ class NearbySignalSpotsNotifier extends StateNotifier<AsyncValue<SignalSpotListR
     double radiusKm = 5.0,
     int limit = 100,
     int offset = 0,
+    bool forceRefresh = false,
   }) async {
-    print('loadNearbySpots called with lat=$latitude, lng=$longitude, radius=$radiusKm');
+    print('loadNearbySpots called with lat=$latitude, lng=$longitude, radius=$radiusKm, forceRefresh=$forceRefresh');
+    
+    // 캐시 키 생성 (위치와 반경 기반)
+    final loadKey = '${latitude.toStringAsFixed(3)}_${longitude.toStringAsFixed(3)}_$radiusKm';
+    
+    // 강제 새로고침이 아니고, 동일한 위치에서 5초 이내 재요청이면 스킵
+    if (!forceRefresh && 
+        _lastLoadKey == loadKey && 
+        _lastLoadTime != null &&
+        DateTime.now().difference(_lastLoadTime!).inSeconds < 5) {
+      print('Skipping load - same location loaded recently');
+      return;
+    }
+    
+    _lastLoadKey = loadKey;
+    _lastLoadTime = DateTime.now();
+    
     state = const AsyncValue.loading();
     
     try {
@@ -37,7 +56,7 @@ class NearbySignalSpotsNotifier extends StateNotifier<AsyncValue<SignalSpotListR
         offset: offset,
       );
       
-      print('Received response with ${response.data.length} spots');
+      print('Received response with ${response.data.length} spots (forceRefresh: $forceRefresh)');
       state = AsyncValue.data(response);
     } catch (error, stackTrace) {
       print('Error loading nearby spots: $error');
@@ -55,6 +74,7 @@ class NearbySignalSpotsNotifier extends StateNotifier<AsyncValue<SignalSpotListR
       latitude: latitude,
       longitude: longitude,
       radiusKm: radiusKm,
+      forceRefresh: true, // refresh는 항상 강제 새로고침
     );
   }
 }

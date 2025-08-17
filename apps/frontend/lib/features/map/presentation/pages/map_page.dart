@@ -137,11 +137,16 @@ class _MapPageState extends ConsumerState<MapPage> with AutomaticKeepAliveClient
                         ),
                       );
                       
+                      // 캐시 초기화
+                      _cachedMarkers.clear();
+                      _lastLoadedPosition = null; // 위치 캐시도 초기화
+                      
                       // 캐시를 무시하고 강제로 새로 로드
                       await ref.read(nearbySignalSpotsProvider.notifier).loadNearbySpots(
                         latitude: _currentPosition!.latitude,
                         longitude: _currentPosition!.longitude,
                         radiusKm: 50.0,
+                        forceRefresh: true, // 강제 새로고침
                       );
                       
                       // 마커 업데이트 (디바운싱 처리됨)
@@ -1174,8 +1179,8 @@ class _MapPageState extends ConsumerState<MapPage> with AutomaticKeepAliveClient
       final latDiff = (position.latitude - _lastLoadedPosition!.latitude).abs();
       final lngDiff = (position.longitude - _lastLoadedPosition!.longitude).abs();
       
-      // 거리가 충분히 멀 때만 새로 로드 (약 2km 이상)
-      if (latDiff < 0.02 && lngDiff < 0.02) {
+      // 거리가 충분히 멀 때만 새로 로드 (약 500m 이상)
+      if (latDiff < 0.005 && lngDiff < 0.005) {
         return;
       }
     }
@@ -1189,7 +1194,11 @@ class _MapPageState extends ConsumerState<MapPage> with AutomaticKeepAliveClient
         latitude: position.latitude,
         longitude: position.longitude,
         radiusKm: 50.0, // 반경 50km로 확대
+        forceRefresh: true, // 강제 새로고침
       );
+      
+      // 마커 업데이트 호출 추가
+      _updateMarkers();
     } catch (e) {
       print('❌ 위치 기반 Signal Spot 로드 실패: $e');
     }

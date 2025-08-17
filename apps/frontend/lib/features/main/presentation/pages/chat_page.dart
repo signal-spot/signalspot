@@ -148,11 +148,20 @@ class _ChatPageState extends ConsumerState<ChatPage>
               child: FadeTransition(
                 opacity: _fadeAnimation,
                 child: chatRoomsAsync.when(
-                  data: (chatRooms) => chatRooms.isEmpty
-                      ? _buildEmptyState()
-                      : RefreshIndicator(
-                          onRefresh: () => ref.read(chatRoomsProvider.notifier).refreshChatRooms(),
-                          child: ListView.builder(
+                  data: (chatRooms) => RefreshIndicator(
+                    onRefresh: () => ref.read(chatRoomsProvider.notifier).refreshChatRooms(),
+                    child: chatRooms.isEmpty
+                        ? ListView(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            children: [
+                              SizedBox(
+                                height: MediaQuery.of(context).size.height * 0.5,
+                                child: _buildEmptyState(),
+                              ),
+                            ],
+                          )
+                        : ListView.builder(
+                            physics: const AlwaysScrollableScrollPhysics(),
                             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
                             itemCount: chatRooms.length,
                             itemBuilder: (context, index) {
@@ -171,7 +180,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                               );
                             },
                           ),
-                        ),
+                  ),
                   loading: () => const Center(
                     child: CircularProgressIndicator(),
                   ),

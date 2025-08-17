@@ -784,6 +784,15 @@ export class SparkDetectionService {
     if (!accept) {
       // If either user rejects, spark is rejected
       spark.status = SparkStatus.REJECTED;
+      
+      // Emit rejection event to notify the other user
+      const otherUserId = isUser1 ? spark.user2.id : spark.user1.id;
+      this.eventEmitter.emit('spark.rejected', {
+        sparkId: spark.id,
+        rejectedBy: userId,
+        otherUserId: otherUserId
+      });
+      this.logger.debug(`Emitted spark.rejected event for spark ${sparkId}`, 'SparkDetectionService');
     } else if (spark.type === SparkType.PROXIMITY) {
       // For proximity and automatic sparks, both users must accept
       if (spark.user1Accepted && spark.user2Accepted) {

@@ -240,6 +240,19 @@ class PushNotificationService {
     print('Message notification: ${message.notification?.title} - ${message.notification?.body}');
     print('Message data: ${message.data}');
     
+    // Firebase Auth 내부 메시지 필터링
+    // Firebase Phone Auth의 reCAPTCHA 검증 메시지는 무시
+    if (message.data.containsKey('com.google.firebase.auth')) {
+      print('Ignoring Firebase Auth internal message');
+      return;
+    }
+    
+    // notification이 없고 type도 없는 메시지는 무시 (시스템 메시지일 가능성)
+    if (message.notification == null && !message.data.containsKey('type')) {
+      print('Ignoring system message without notification or type');
+      return;
+    }
+    
     // Check if notification should be shown based on settings
     if (!_shouldShowNotification(message)) {
       print('Notification should not be shown based on settings');

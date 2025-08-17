@@ -214,6 +214,21 @@ export class NotificationController {
     };
   }
 
+  @Post('reset-badge')
+  @ApiOperation({ summary: 'Reset notification badge to 0' })
+  @ApiResponse({ status: 200, description: 'Badge reset successfully' })
+  async resetBadge(@Request() req: any) {
+    const userId = req.user.id;
+    
+    // Reset badge without marking notifications as read
+    const success = await this.notificationService.resetUserBadge(userId);
+    
+    return {
+      success,
+      message: success ? 'Badge reset successfully' : 'Failed to reset badge',
+    };
+  }
+
   @Delete(':id')
   @ApiOperation({ summary: 'Delete notification' })
   @ApiResponse({ status: 200, description: 'Notification deleted' })
