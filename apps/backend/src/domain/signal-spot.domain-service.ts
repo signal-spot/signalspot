@@ -320,11 +320,6 @@ export class SignalSpotDomainService {
     latitude: number,
     longitude: number
   ): Promise<void> {
-    // Business Rule: Check if user's location sharing is enabled
-    // Skip location tracking check in development mode
-    if (!user.locationTrackingEnabled && process.env.NODE_ENV !== 'development') {
-      throw new Error('Location tracking must be enabled to create spots');
-    }
 
     // Business Rule: Check if user is actually at the location (if recent location available)
     if (user.hasRecentLocation(30)) { // 30 minutes
