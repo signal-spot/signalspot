@@ -154,8 +154,8 @@ class _PhoneAuthPageState extends ConsumerState<PhoneAuthPage>
         if (mounted) {
           setState(() => _isLoading = false);
 
-          // push를 사용하여 네비게이션 스택 유지
-          context.push(
+          // go를 사용하여 직접 이동
+          context.go(
             '/auth/sms-verification',
             extra: {
               'phoneNumber': fullPhoneNumber,
@@ -169,6 +169,9 @@ class _PhoneAuthPageState extends ConsumerState<PhoneAuthPage>
 
       final authService = FirebaseAuthService();
 
+      // reCAPTCHA 콜백을 위해 미리 전화번호 저장
+      FirebaseAuthService.pendingPhoneNumber = fullPhoneNumber;
+
       // Firebase Phone Auth 사용
       await authService.sendVerificationCode(
         phoneNumber: fullPhoneNumber,
@@ -177,16 +180,16 @@ class _PhoneAuthPageState extends ConsumerState<PhoneAuthPage>
             'PhoneAuth: Code sent successfully, verificationId: $verificationId',
           );
 
-          // FirebaseAuthService에 정보 저장
+          // FirebaseAuthService에 verificationId 저장
           FirebaseAuthService.pendingVerificationId = verificationId;
-          FirebaseAuthService.pendingPhoneNumber = fullPhoneNumber;
           
           // mounted 체크 후 상태 업데이트
           if (mounted) {
             setState(() => _isLoading = false);
             
-            // push를 사용하여 네비게이션 스택 유지
-            context.push(
+            print('PhoneAuth: Navigating to SMS verification page');
+            // go를 사용하여 직접 이동 (reCAPTCHA 콜백과 충돌 방지)
+            context.go(
               '/auth/sms-verification',
               extra: {
                 'phoneNumber': fullPhoneNumber,
@@ -194,6 +197,7 @@ class _PhoneAuthPageState extends ConsumerState<PhoneAuthPage>
                 'isTestNumber': false,
               },
             );
+            print('PhoneAuth: Navigation to SMS verification triggered');
           }
         },
         onError: (String error) {
@@ -220,7 +224,7 @@ class _PhoneAuthPageState extends ConsumerState<PhoneAuthPage>
               );
               setState(() => _isLoading = false);
               // 자동 인증 완료 시 바로 다음 단계로
-              context.push(
+              context.go(
                 '/auth/sms-verification',
                 extra: {
                   'phoneNumber': fullPhoneNumber,

@@ -217,11 +217,15 @@ class _SmsVerificationPageState extends ConsumerState<SmsVerificationPage>
 
       // Firebase에서 현재 사용자의 ID 토큰 가져오기
       String? firebaseIdToken;
+      String? actualPhoneNumber = widget.phoneNumber; // 기본값은 widget에서 받은 번호
       final firebaseUser = firebase.FirebaseAuth.instance.currentUser;
       if (firebaseUser != null) {
         try {
           firebaseIdToken = await firebaseUser.getIdToken();
+          // Firebase가 실제로 인증한 전화번호 사용 (0이 제거된 형식)
+          actualPhoneNumber = firebaseUser.phoneNumber ?? widget.phoneNumber;
           print('SMS 검증: Firebase ID 토큰 획득 성공: ${firebaseIdToken?.substring(0, 30)}...');
+          print('SMS 검증: Firebase 인증된 전화번호: $actualPhoneNumber');
         } catch (e) {
           print('SMS 검증: Firebase ID 토큰 획득 실패: $e');
         }
@@ -236,8 +240,14 @@ class _SmsVerificationPageState extends ConsumerState<SmsVerificationPage>
             (widget.verificationId == 'test-verification-id' || 
              widget.phoneNumber == '+8201011111111' ||
              widget.phoneNumber == '+8201012345678' )) {
-          print('SMS 검증: [DEBUG] 테스트 모드 - 임시 토큰 사용');
-          firebaseIdToken = 'test-token-${DateTime.now().millisecondsSinceEpoch}';
+          print('SMS 검증: [DEBUG] 테스트 모드 - 테스트용 JWT 토큰 생성');
+          // Firebase ID 토큰과 유사한 형식의 테스트 JWT 생성
+          // 형식: header.payload.signature
+          final header = 'eyJhbGciOiJSUzI1NiIsImtpZCI6InRlc3QiLCJ0eXAiOiJKV1QifQ';
+          final payload = 'eyJpc3MiOiJodHRwczovL3NlY3VyZXRva2VuLmdvb2dsZS5jb20vc2lnbmFsc3BvdC05Yzg2NCIsImF1ZCI6InNpZ25hbHNwb3QtOWM4NjQiLCJhdXRoX3RpbWUiOjE3MzQzNDU2MDAsInVzZXJfaWQiOiJ0ZXN0LXVzZXItJHtEYXRlVGltZS5ub3coKS5taWxsaXNlY29uZFNpbmNlRXBvY2h9Iiwic3ViIjoidGVzdC11c2VyIiwiaWF0IjoxNzM0MzQ1NjAwLCJleHAiOjE3MzQzNDkyMDAsInBob25lX251bWJlciI6IiR7d2lkZ2V0LnBob25lTnVtYmVyfSIsImZpcmViYXNlIjp7ImlkZW50aXRpZXMiOnsicGhvbmUiOlsiJHt3aWRnZXQucGhvbmVOdW1iZXJ9Il19LCJzaWduX2luX3Byb3ZpZGVyIjoicGhvbmUifX0';
+          final signature = 'test_signature_${DateTime.now().millisecondsSinceEpoch}';
+          firebaseIdToken = '$header.$payload.$signature';
+          print('SMS 검증: [DEBUG] 생성된 테스트 토큰: $firebaseIdToken');
         } else {
           throw Exception('Firebase 인증 토큰을 가져올 수 없습니다. 다시 시도해주세요.');
         }
@@ -247,7 +257,7 @@ class _SmsVerificationPageState extends ConsumerState<SmsVerificationPage>
       final response = await apiClient.post(
         '/auth/phone/authenticate',
         data: {
-          'phoneNumber': widget.phoneNumber,
+          'phoneNumber': actualPhoneNumber, // Firebase가 인증한 실제 번호 사용
           'firebaseToken': firebaseIdToken, // 항상 유효한 토큰 (실제 또는 테스트)
         },
       );

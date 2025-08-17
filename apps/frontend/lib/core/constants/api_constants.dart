@@ -4,7 +4,7 @@ class ApiConstants {
   static String get baseUrl {
     try {
       // ngrok URL for development - works for both simulator and real device
-      const String ngrokUrl = 'https://f7d139758396.ngrok-free.app/api';
+      const String ngrokUrl = 'http://3.39.206.100:3000/api';
 
       // Use ngrok URL for universal access
       return ngrokUrl;

@@ -678,7 +678,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                   ),
                   const SizedBox(height: AppSpacing.xs),
                   Text(
-                    '에러: ${error.toString()}',
+                    '위치 권한을 허용하거나 잠시 후 다시 시도해 주세요',
                     style: AppTextStyles.bodySmall.copyWith(
                       color: AppColors.grey500,
                     ),

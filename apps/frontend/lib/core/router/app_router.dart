@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -378,33 +379,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             final deepLink = state.uri.queryParameters['deep_link_id'] ?? '';
             if (deepLink.contains('authType=verifyApp') && deepLink.contains('recaptchaToken')) {
               print('Phone Auth reCAPTCHA callback detected');
-              
-              // FirebaseAuthService에서 pending 정보 확인 및 SMS 페이지로 이동
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                Future.delayed(const Duration(milliseconds: 500), () {
-                  if (context.mounted) {
-                    final verificationId = FirebaseAuthService.pendingVerificationId;
-                    final phoneNumber = FirebaseAuthService.pendingPhoneNumber;
-                    
-                    print('Checking pending info: verificationId=$verificationId, phoneNumber=$phoneNumber');
-                    
-                    if (verificationId != null && phoneNumber != null) {
-                      // pending 정보 초기화
-                      FirebaseAuthService.pendingVerificationId = null;
-                      FirebaseAuthService.pendingPhoneNumber = null;
-                      
-                      // SMS 검증 페이지로 이동
-                      context.go('/auth/sms-verification', extra: {
-                        'phoneNumber': phoneNumber,
-                        'verificationId': verificationId,
-                      });
-                    } else {
-                      // 정보가 없으면 전화번호 입력 화면으로
-                      context.go('/auth/phone');
-                    }
-                  }
-                });
-              });
+              return const _ReCaptchaCallbackPage();
             }
           }
           
@@ -513,6 +488,107 @@ final routerProvider = Provider<GoRouter>((ref) {
     ),
   );
 });
+
+// reCAPTCHA 콜백 처리 페이지
+class _ReCaptchaCallbackPage extends StatefulWidget {
+  const _ReCaptchaCallbackPage({Key? key}) : super(key: key);
+
+  @override
+  State<_ReCaptchaCallbackPage> createState() => _ReCaptchaCallbackPageState();
+}
+
+class _ReCaptchaCallbackPageState extends State<_ReCaptchaCallbackPage> {
+  Timer? _timer;
+  int _attemptCount = 0;
+  static const int _maxAttempts = 100; // 10초 (100ms * 100)
+  
+  @override
+  void initState() {
+    super.initState();
+    print('ReCaptchaCallbackPage: Starting verification monitoring');
+    _startMonitoring();
+  }
+  
+  void _startMonitoring() {
+    _timer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
+      _attemptCount++;
+      
+      final verificationId = FirebaseAuthService.pendingVerificationId;
+      final phoneNumber = FirebaseAuthService.pendingPhoneNumber;
+      
+      print('ReCaptchaCallbackPage: Checking (attempt $_attemptCount): verificationId=$verificationId, phoneNumber=$phoneNumber');
+      
+      if (verificationId != null && phoneNumber != null) {
+        // verificationId가 설정되면 SMS 페이지로 이동
+        print('ReCaptchaCallbackPage: Navigating to SMS verification');
+        timer.cancel();
+        
+        if (mounted) {
+          context.go('/auth/sms-verification', extra: {
+            'phoneNumber': phoneNumber,
+            'verificationId': verificationId,
+            'isTestNumber': false,
+          });
+        }
+      } else if (_attemptCount >= _maxAttempts) {
+        // 타임아웃 - 전화번호 입력 페이지로 돌아가기
+        print('ReCaptchaCallbackPage: Timeout, returning to phone auth');
+        timer.cancel();
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('인증 시간이 초과되었습니다. 다시 시도해주세요.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          context.go('/auth/phone');
+        }
+      }
+    });
+  }
+  
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+  
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(height: 24),
+            Text(
+              '인증 처리 중...',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '잠시만 기다려주세요',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Colors.grey[600],
+              ),
+            ),
+            const SizedBox(height: 32),
+            TextButton(
+              onPressed: () {
+                _timer?.cancel();
+                context.go('/auth/phone');
+              },
+              child: const Text('취소'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 // Router helper class
 class AppRouter {
