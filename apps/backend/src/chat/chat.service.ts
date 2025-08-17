@@ -64,10 +64,11 @@ export class ChatService {
 
     // 새 채팅방 생성
     const chatRoom = new ChatRoom();
-    chatRoom.name = name;
+    chatRoom.name = name || `${currentUser.username || 'User'} & ${participant.username || 'User'}`; // Set default name if not provided
     chatRoom.type = type || ChatRoomType.DIRECT;
     chatRoom.participant1 = currentUser;
     chatRoom.participant2 = participant;
+    chatRoom.initiatedBy = 'direct'; // Set how the chat was initiated
 
     await this.em.persistAndFlush(chatRoom);
 

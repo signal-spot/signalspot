@@ -837,6 +837,8 @@ export class SparkDetectionService {
         chatRoom.participant1 = user1!;
         chatRoom.participant2 = user2!;
         chatRoom.sparkId = spark.id;
+        chatRoom.name = `${user1!.username || 'User'} & ${user2!.username || 'User'}`; // Set chat room name
+        chatRoom.initiatedBy = 'spark'; // Set how the chat was initiated
         await this.em.persistAndFlush(chatRoom);
         chatRoomId = chatRoom.id;
       } else {

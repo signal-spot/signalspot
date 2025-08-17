@@ -59,7 +59,6 @@ class FirebaseAuthService {
       // 개발 환경에서만 테스트 번호 우회 (프로덕션에서는 제거 필요)
       const bool isDebugMode = true; // TODO: kDebugMode 또는 환경변수로 변경
       if (isDebugMode && (
-          phoneNumber == '+821012345678' ||
           phoneNumber == '+821011111111')) {
         print('FirebaseAuth: [DEBUG] Test number detected, skipping Firebase');
         onCodeSent('test-verification-id');

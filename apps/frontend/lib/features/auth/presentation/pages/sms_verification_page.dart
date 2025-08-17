@@ -174,8 +174,8 @@ class _SmsVerificationPageState extends ConsumerState<SmsVerificationPage>
         print('SMS 검증: 자동 인증 완료');
       } else if (const bool.fromEnvironment('DEBUG_MODE', defaultValue: true) && (
                  widget.verificationId == 'test-verification-id' || 
-                 widget.phoneNumber == '+8201011111111' ||
-                 widget.phoneNumber == '+8201012345678')) {
+                 widget.phoneNumber == '+821011111111' ||
+                 widget.phoneNumber == '+821012345678')) {
         // 개발 환경 테스트 모드: 123456만 허용
         if (_verificationCode != '123456') {
           throw Exception('[DEBUG] 테스트 모드: 인증코드는 123456입니다');
@@ -238,8 +238,8 @@ class _SmsVerificationPageState extends ConsumerState<SmsVerificationPage>
         // 테스트 모드인 경우에만 임시 토큰 사용
         if (const bool.fromEnvironment('DEBUG_MODE', defaultValue: true) && 
             (widget.verificationId == 'test-verification-id' || 
-             widget.phoneNumber == '+8201011111111' ||
-             widget.phoneNumber == '+8201012345678' )) {
+             widget.phoneNumber == '+821011111111' ||
+             widget.phoneNumber == '+821012345678' )) {
           print('SMS 검증: [DEBUG] 테스트 모드 - 테스트용 JWT 토큰 생성');
           // Firebase ID 토큰과 유사한 형식의 테스트 JWT 생성
           // 형식: header.payload.signature

@@ -135,15 +135,19 @@ class _PhoneAuthPageState extends ConsumerState<PhoneAuthPage>
     try {
       HapticFeedback.mediumImpact();
 
-      final fullPhoneNumber = '$_countryCode$_phoneNumber';
+      // Firebase 형식으로 전화번호 변환 (010 -> 10)
+      String formattedPhone = _phoneNumber;
+      if (_phoneNumber.startsWith('0')) {
+        formattedPhone = _phoneNumber.substring(1); // 앞의 0 제거
+      }
+      final fullPhoneNumber = '$_countryCode$formattedPhone';
 
       print('PhoneAuth: Sending verification code to $fullPhoneNumber');
 
       // 개발 환경에서만 테스트 번호 우회 (프로덕션에서는 제거 필요)
       const bool isDebugMode = true; // TODO: kDebugMode 또는 환경변수로 변경
       if (isDebugMode && (
-          fullPhoneNumber == '+8201012345678' ||
-          fullPhoneNumber == '+8201011111111')) {
+          fullPhoneNumber == '+821011111111')) {
         print(
           'PhoneAuth: [DEBUG] Test number detected, navigating to SMS verification',
         );
