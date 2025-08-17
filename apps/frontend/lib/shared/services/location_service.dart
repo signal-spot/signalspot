@@ -71,8 +71,8 @@ class LocationService {
   
   // 현재 위치 가져오기
   Future<Position> getCurrentPosition() async {
-    // 개발 모드에서는 서울시청 좌표 반환
-    const bool isDevelopment = true; // 개발 모드: 서울시청 위치 사용
+    // 개발 모드에서는 서울시청 좌표 반환 - 실제 기기에서는 비활성화
+    const bool isDevelopment = false; // 실제 위치 사용
     if (isDevelopment) {
       print('🗺️ LocationService: 개발 모드 - 서울시청 좌표 사용');
       return Position(

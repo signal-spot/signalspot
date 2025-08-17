@@ -55,12 +55,37 @@ class _HomePageState extends ConsumerState<HomePage> {
           longitude: position.longitude,
         );
       } else {
-        print('No position available, using default Seoul location');
-        // 위치가 없으면 서울 시청을 기본 위치로 사용
-        ref.read(nearbySignalSpotsProvider.notifier).loadNearbySpots(
-          latitude: 37.5665,
-          longitude: 126.9780,
-        );
+        print('No position available, requesting location permission');
+        // 위치가 없으면 위치 권한 요청 후 재시도
+        final locationService = ref.read(locationServiceProvider);
+        final hasPermission = await locationService.requestLocationPermission();
+        
+        if (hasPermission) {
+          // 권한이 허용되면 다시 위치 가져오기 시도
+          await ref.read(currentPositionProvider.notifier).getCurrentPosition();
+          final newPosition = ref.read(currentPositionProvider).value;
+          
+          if (newPosition != null) {
+            ref.read(nearbySignalSpotsProvider.notifier).loadNearbySpots(
+              latitude: newPosition.latitude,
+              longitude: newPosition.longitude,
+            );
+          } else {
+            // 그래도 위치를 못 가져오면 기본값 사용 (서울 시청)
+            print('Still no position available, using default Seoul location');
+            ref.read(nearbySignalSpotsProvider.notifier).loadNearbySpots(
+              latitude: 37.5665,
+              longitude: 126.9780,
+            );
+          }
+        } else {
+          // 권한이 거부되면 기본값 사용
+          print('Location permission denied, using default Seoul location');
+          ref.read(nearbySignalSpotsProvider.notifier).loadNearbySpots(
+            latitude: 37.5665,
+            longitude: 126.9780,
+          );
+        }
       }
       
       // 인기 Signal Spots 로드
@@ -779,13 +804,28 @@ class _HomePageState extends ConsumerState<HomePage> {
                   const SizedBox(height: AppSpacing.sm),
                   TextButton(
                     onPressed: () async {
-                      final position = ref.read(currentPositionProvider).value;
-                      if (position != null) {
-                        ref.read(nearbySignalSpotsProvider.notifier).loadNearbySpots(
-                          latitude: position.latitude,
-                          longitude: position.longitude,
-                        );
+                      // 위치 권한 재요청 후 다시 시도
+                      final locationService = ref.read(locationServiceProvider);
+                      final hasPermission = await locationService.requestLocationPermission();
+                      
+                      if (hasPermission) {
+                        await ref.read(currentPositionProvider.notifier).getCurrentPosition();
+                        final position = ref.read(currentPositionProvider).value;
+                        
+                        if (position != null) {
+                          ref.read(nearbySignalSpotsProvider.notifier).loadNearbySpots(
+                            latitude: position.latitude,
+                            longitude: position.longitude,
+                          );
+                        } else {
+                          // 위치를 못 가져오면 기본값 사용
+                          ref.read(nearbySignalSpotsProvider.notifier).loadNearbySpots(
+                            latitude: 37.5665,
+                            longitude: 126.9780,
+                          );
+                        }
                       } else {
+                        // 권한이 거부되면 기본값 사용
                         ref.read(nearbySignalSpotsProvider.notifier).loadNearbySpots(
                           latitude: 37.5665,
                           longitude: 126.9780,

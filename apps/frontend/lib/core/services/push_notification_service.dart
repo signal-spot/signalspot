@@ -253,6 +253,12 @@ class PushNotificationService {
       return;
     }
     
+    // badge_reset 타입의 메시지는 알림을 표시하지 않음
+    if (message.data['type'] == 'badge_reset') {
+      print('Badge reset message received, not showing notification');
+      return;
+    }
+    
     // Check if notification should be shown based on settings
     if (!_shouldShowNotification(message)) {
       print('Notification should not be shown based on settings');
