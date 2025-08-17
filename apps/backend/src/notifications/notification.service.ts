@@ -481,11 +481,18 @@ export class NotificationService implements OnModuleInit {
     likerUsername: string;
     spotTitle?: string;
   }): Promise<void> {
+    // 디버깅 로그 추가
+    this.logger.log('===== handleSignalSpotLiked START =====', 'NotificationService');
+    this.logger.debug(`Received event data: ${JSON.stringify(data)}`, 'NotificationService');
+    
     try {
       // Don't notify if user liked their own spot
       if (data.spotCreatorId === data.likerUserId) {
+        this.logger.debug('User liked their own spot, skipping notification', 'NotificationService');
         return;
       }
+      
+      this.logger.debug(`Preparing notification for user: ${data.spotCreatorId}`, 'NotificationService');
 
       const notification: NotificationPayload = {
         title: '❤️ 새로운 좋아요',
@@ -499,10 +506,16 @@ export class NotificationService implements OnModuleInit {
           likerUsername: data.likerUsername,
         },
       };
-
-      await this.sendNotification(notification);
+      
+      this.logger.debug('Calling sendNotification...', 'NotificationService');
+      const result = await this.sendNotification(notification);
+      this.logger.log(`✅ Notification sent result: ${result}`, 'NotificationService');
+      
     } catch (error) {
-      this.logger.error('Error handling spot liked event', error.stack, 'NotificationService');
+      this.logger.error('❌ Error in handleSignalSpotLiked', error.stack, 'NotificationService');
+      this.logger.error(`Error details: ${error.message}`, null, 'NotificationService');
+    } finally {
+      this.logger.log('===== handleSignalSpotLiked END =====', 'NotificationService');
     }
   }
 
