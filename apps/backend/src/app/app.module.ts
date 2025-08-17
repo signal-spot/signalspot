@@ -15,7 +15,6 @@ import { ProfileModule } from '../profile/profile.module';
 import { UploadModule } from '../upload/upload.module';
 import { SparkModule } from '../spark/spark.module';
 import { FeedModule } from '../feed/feed.module';
-import { NotificationModule as PushNotificationModule } from '../notification/notification.module';
 import { NotificationModule as NotificationsModule } from '../notifications/notification.module';
 import { SacredSiteModule } from '../sacred-site/sacred-site.module';
 import { ChatModule } from '../chat/chat.module';
