@@ -72,10 +72,25 @@ class _HomePageState extends ConsumerState<HomePage> {
       // ref.read(sparkStatsProvider.notifier).loadStats();
       
       // 알림 데이터 로드
-      ref.read(notificationListProvider.notifier).loadNotifications();
+      print('[DEBUG] HomePage._loadInitialData - Loading notifications...');
+      await ref.read(notificationListProvider.notifier).loadNotifications();
+      print('[DEBUG] HomePage._loadInitialData - Notifications loaded');
+      
+      // 로드 후 상태 확인
+      final notificationState = ref.read(notificationListProvider);
+      print('[DEBUG] HomePage._loadInitialData - notificationState: $notificationState');
+      
+      notificationState.when(
+        data: (response) {
+          print('[DEBUG] HomePage._loadInitialData - Loaded unreadCount: ${response.unreadCount}');
+          print('[DEBUG] HomePage._loadInitialData - Loaded notifications: ${response.notifications.length}');
+        },
+        loading: () => print('[DEBUG] HomePage._loadInitialData - Still loading...'),
+        error: (error, _) => print('[DEBUG] HomePage._loadInitialData - Error: $error'),
+      );
     } catch (e) {
-      print('초기 데이터 로드 실패: $e');
-      print('Stack trace: ${StackTrace.current}');
+      print('[ERROR] HomePage._loadInitialData - 초기 데이터 로드 실패: $e');
+      print('[ERROR] HomePage._loadInitialData - Stack trace: ${StackTrace.current}');
     }
   }
 
@@ -193,36 +208,87 @@ class _HomePageState extends ConsumerState<HomePage> {
                         builder: (context, ref, _) {
                           final showBadge = ref.watch(showNotificationBadgeProvider);
                           final unreadCount = ref.watch(unreadNotificationCountProvider);
+                          final notificationList = ref.watch(notificationListProvider);
                           
-                          if (!showBadge) return const SizedBox.shrink();
+                          // 디버깅 로그 추가
+                          print('[DEBUG] HomePage Badge - showBadge: $showBadge');
+                          print('[DEBUG] HomePage Badge - unreadCount: $unreadCount');
+                          print('[DEBUG] HomePage Badge - notificationList: $notificationList');
+                          
+                          // notificationList 상세 정보 로깅
+                          notificationList.when(
+                            data: (response) {
+                              print('[DEBUG] HomePage Badge - response.unreadCount: ${response.unreadCount}');
+                              print('[DEBUG] HomePage Badge - response.notifications.length: ${response.notifications.length}');
+                              print('[DEBUG] HomePage Badge - response.totalCount: ${response.totalCount}');
+                            },
+                            loading: () => print('[DEBUG] HomePage Badge - Loading notifications...'),
+                            error: (error, _) => print('[DEBUG] HomePage Badge - Error: $error'),
+                          );
+                          
+                          // unreadCount 상세 정보 로깅
+                          unreadCount.when(
+                            data: (count) => print('[DEBUG] HomePage Badge - Unread count value: $count'),
+                            loading: () => print('[DEBUG] HomePage Badge - Unread count loading...'),
+                            error: (error, _) => print('[DEBUG] HomePage Badge - Unread count error: $error'),
+                          );
+                          
+                          if (!showBadge) {
+                            print('[DEBUG] HomePage Badge - Not showing badge (showBadge is false)');
+                            return const SizedBox.shrink();
+                          }
                           
                           return Positioned(
-                            right: 0,
-                            top: 0,
-                            child: Container(
-                              width: unreadCount.maybeWhen(
-                                data: (count) => count > 9 ? 16 : 8,
-                                orElse: () => 8,
-                              ),
-                              height: 8,
-                              decoration: const BoxDecoration(
-                                color: AppColors.error,
-                                shape: BoxShape.circle,
-                              ),
-                              child: unreadCount.maybeWhen(
-                                data: (count) => count > 9
-                                    ? Center(
-                                        child: Text(
-                                          '9+',
-                                          style: AppTextStyles.labelSmall.copyWith(
-                                            color: AppColors.white,
-                                            fontSize: 6,
-                                          ),
-                                        ),
-                                      )
-                                    : null,
-                                orElse: () => null,
-                              ),
+                            right: -2,
+                            top: -2,
+                            child: unreadCount.when(
+                              data: (count) {
+                                print('[DEBUG] HomePage Badge - Rendering badge with count: $count');
+                                if (count <= 0) {
+                                  print('[DEBUG] HomePage Badge - Count is 0 or less, hiding badge');
+                                  return const SizedBox.shrink();
+                                }
+                                
+                                // 항상 카운트를 표시하도록 변경
+                                final displayText = count > 99 ? '99+' : count.toString();
+                                final badgeSize = count > 99 ? 20.0 : (count > 9 ? 18.0 : 16.0);
+                                
+                                print('[DEBUG] HomePage Badge - Showing badge with text: $displayText');
+                                
+                                return Container(
+                                  constraints: BoxConstraints(
+                                    minWidth: badgeSize,
+                                    minHeight: badgeSize,
+                                  ),
+                                  padding: const EdgeInsets.all(2),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.error,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: AppColors.white,
+                                      width: 1.5,
+                                    ),
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      displayText,
+                                      style: AppTextStyles.labelSmall.copyWith(
+                                        color: AppColors.white,
+                                        fontSize: count > 99 ? 9 : (count > 9 ? 10 : 11),
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                              loading: () {
+                                print('[DEBUG] HomePage Badge - Unread count is loading');
+                                return const SizedBox.shrink();
+                              },
+                              error: (error, _) {
+                                print('[DEBUG] HomePage Badge - Error in unread count: $error');
+                                return const SizedBox.shrink();
+                              },
                             ),
                           );
                         },

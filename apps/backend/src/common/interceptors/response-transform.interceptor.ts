@@ -85,6 +85,11 @@ export class ResponseTransformInterceptor implements NestInterceptor {
             apiResponse.data = data.data || data.items;
           }
           
+          // Preserve unreadCount for notification responses
+          if ('unreadCount' in data) {
+            apiResponse['unreadCount'] = data.unreadCount;
+          }
+          
           if ('total' in data && 'limit' in data && 'offset' in data) {
             const { total, limit, offset } = data;
             const page = Math.floor(offset / limit) + 1;

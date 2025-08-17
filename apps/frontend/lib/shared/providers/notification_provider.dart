@@ -22,6 +22,9 @@ class NotificationListNotifier extends StateNotifier<AsyncValue<NotificationList
     int offset = 0,
     bool unreadOnly = false,
   }) async {
+    print('[DEBUG] NotificationListNotifier.loadNotifications - Starting...');
+    print('[DEBUG] NotificationListNotifier.loadNotifications - limit: $limit, offset: $offset, unreadOnly: $unreadOnly');
+    
     state = const AsyncValue.loading();
     
     try {
@@ -30,8 +33,17 @@ class NotificationListNotifier extends StateNotifier<AsyncValue<NotificationList
         offset: offset,
         unreadOnly: unreadOnly,
       );
+      
+      print('[DEBUG] NotificationListNotifier.loadNotifications - Response received');
+      print('[DEBUG] NotificationListNotifier.loadNotifications - unreadCount: ${response.unreadCount}');
+      print('[DEBUG] NotificationListNotifier.loadNotifications - notifications.length: ${response.notifications.length}');
+      print('[DEBUG] NotificationListNotifier.loadNotifications - totalCount: ${response.totalCount}');
+      
       state = AsyncValue.data(response);
+      print('[DEBUG] NotificationListNotifier.loadNotifications - State updated to data');
     } catch (error, stackTrace) {
+      print('[DEBUG] NotificationListNotifier.loadNotifications - Error: $error');
+      print('[DEBUG] NotificationListNotifier.loadNotifications - StackTrace: $stackTrace');
       state = AsyncValue.error(error, stackTrace);
     }
   }
@@ -75,13 +87,23 @@ class NotificationListNotifier extends StateNotifier<AsyncValue<NotificationList
 final unreadNotificationCountProvider = Provider<AsyncValue<int>>((ref) {
   final notificationList = ref.watch(notificationListProvider);
   
+  print('[DEBUG] unreadNotificationCountProvider - notificationList state: $notificationList');
+  
   return notificationList.when(
     data: (response) {
       // unreadCount를 직접 사용 (NotificationListResponse에 정의됨)
+      print('[DEBUG] unreadNotificationCountProvider - response.unreadCount: ${response.unreadCount}');
+      print('[DEBUG] unreadNotificationCountProvider - response.notifications.length: ${response.notifications.length}');
       return AsyncValue.data(response.unreadCount);
     },
-    loading: () => const AsyncValue.loading(),
-    error: (error, stackTrace) => AsyncValue.error(error, stackTrace),
+    loading: () {
+      print('[DEBUG] unreadNotificationCountProvider - Loading...');
+      return const AsyncValue.loading();
+    },
+    error: (error, stackTrace) {
+      print('[DEBUG] unreadNotificationCountProvider - Error: $error');
+      return AsyncValue.error(error, stackTrace);
+    },
   );
 });
 
@@ -157,11 +179,25 @@ class NotificationSettingsNotifier extends StateNotifier<AsyncValue<Notification
 final showNotificationBadgeProvider = Provider<bool>((ref) {
   final unreadCount = ref.watch(unreadNotificationCountProvider);
   
-  return unreadCount.when(
-    data: (count) => count > 0,
-    loading: () => false,
-    error: (_, __) => false,
+  print('[DEBUG] showNotificationBadgeProvider - unreadCount state: $unreadCount');
+  
+  final result = unreadCount.when(
+    data: (count) {
+      print('[DEBUG] showNotificationBadgeProvider - count: $count, returning: ${count > 0}');
+      return count > 0;
+    },
+    loading: () {
+      print('[DEBUG] showNotificationBadgeProvider - Loading, returning: false');
+      return false;
+    },
+    error: (error, _) {
+      print('[DEBUG] showNotificationBadgeProvider - Error: $error, returning: false');
+      return false;
+    },
   );
+  
+  print('[DEBUG] showNotificationBadgeProvider - Final result: $result');
+  return result;
 });
 
 // FCM 토큰 관리

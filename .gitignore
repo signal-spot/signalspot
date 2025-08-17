@@ -129,6 +129,10 @@ logs/
 .taskmaster/tasks/
 .taskmaster/reports/
 
+# Serena MCP cache
+.serena/
+**/.serena/
+
 # Temporary files
 tmp/
 temp/

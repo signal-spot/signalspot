@@ -13,6 +13,7 @@ import 'core/theme/app_theme.dart';
 import 'core/services/firebase_auth_service.dart';
 import 'core/services/push_notification_service.dart';
 import 'core/services/analytics_service.dart';
+import 'core/widgets/app_lifecycle_observer.dart';
 
 // Global Firebase Analytics instance
 late final FirebaseAnalytics analytics;
@@ -115,22 +116,24 @@ class SignalSpotApp extends ConsumerWidget {
       print('🚀 SignalSpotApp: GoRouter obtained');
       
       print('🚀 SignalSpotApp: Creating MaterialApp.router');
-      return MaterialApp.router(
-        title: 'SignalSpot',
-        theme: AppTheme.lightTheme,
-        darkTheme: AppTheme.lightTheme,  // 다크모드에서도 라이트 테마 사용
-        themeMode: ThemeMode.light,  // 항상 라이트 모드 사용
-        routerConfig: router,
-        debugShowCheckedModeBanner: false,
-        builder: (context, child) {
-          return GestureDetector(
-            onTap: () {
-              // 바깥 클릭 시 키보드 닫기
-              FocusManager.instance.primaryFocus?.unfocus();
-            },
-            child: child,
-          );
-        },
+      return AppLifecycleObserver(
+        child: MaterialApp.router(
+          title: 'SignalSpot',
+          theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.lightTheme,  // 다크모드에서도 라이트 테마 사용
+          themeMode: ThemeMode.light,  // 항상 라이트 모드 사용
+          routerConfig: router,
+          debugShowCheckedModeBanner: false,
+          builder: (context, child) {
+            return GestureDetector(
+              onTap: () {
+                // 바깥 클릭 시 키보드 닫기
+                FocusManager.instance.primaryFocus?.unfocus();
+              },
+              child: child,
+            );
+          },
+        ),
       );
     } catch (e, stackTrace) {
       print('❌ SignalSpotApp: ERROR in build()');

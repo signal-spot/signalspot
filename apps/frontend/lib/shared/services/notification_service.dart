@@ -42,7 +42,8 @@ class NotificationService {
         },
       );
       
-      print('Notification API Response: ${response.data}');
+      print('[DEBUG] NotificationService - Raw API Response: ${response.data}');
+      print('[DEBUG] NotificationService - Response type: ${response.data.runtimeType}');
       
       // 백엔드 응답 구조에 맞게 파싱
       // ResponseTransformInterceptor가 응답을 감싸고 있음
@@ -50,13 +51,21 @@ class NotificationService {
       // 구조: { success: true, data: [...], pagination: {...}, unreadCount: 2 }
       final responseData = response.data;
       
+      // 각 필드 개별 확인
+      print('[DEBUG] NotificationService - responseData keys: ${responseData.keys}');
+      print('[DEBUG] NotificationService - responseData["success"]: ${responseData["success"]}');
+      print('[DEBUG] NotificationService - responseData["data"] type: ${responseData["data"]?.runtimeType}');
+      print('[DEBUG] NotificationService - responseData["unreadCount"]: ${responseData["unreadCount"]}');
+      print('[DEBUG] NotificationService - responseData["pagination"]: ${responseData["pagination"]}');
+      
       // data는 이제 notifications 배열 자체
       final notifications = responseData['data'] as List? ?? [];
       final unreadCount = responseData['unreadCount'] ?? 0;
       final pagination = responseData['pagination'] ?? {};
       
-      print('Parsed notifications count: ${notifications.length}');
-      print('Unread count: $unreadCount');
+      print('[DEBUG] NotificationService - Parsed notifications count: ${notifications.length}');
+      print('[DEBUG] NotificationService - Parsed unread count: $unreadCount');
+      print('[DEBUG] NotificationService - Parsed pagination: $pagination');
       
       return NotificationListResponse(
         notifications: notifications
@@ -116,6 +125,17 @@ class NotificationService {
       await _apiClient.dio.put('/notifications/read-all');
     } catch (e) {
       throw _handleError(e);
+    }
+  }
+  
+  // FCM 배지 초기화 (알림은 읽지 않은 상태로 유지)
+  Future<void> resetBadge() async {
+    try {
+      await _apiClient.dio.post('/notifications/reset-badge');
+      print('Badge reset successfully');
+    } catch (e) {
+      print('Failed to reset badge: $e');
+      // 배지 초기화 실패는 앱 동작에 영향을 주지 않으므로 에러를 던지지 않음
     }
   }
   

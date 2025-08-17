@@ -126,19 +126,26 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
           // 모두 읽음 처리 버튼
           TextButton(
             onPressed: notificationList.maybeWhen(
-              data: (response) => response.unreadCount > 0
-                ? () async {
-                    await ref.read(notificationListProvider.notifier).markAllAsRead();
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('모든 알림을 읽음 처리했습니다'),
-                          backgroundColor: AppColors.success,
-                        ),
-                      );
+              data: (response) {
+                // 디버그 로깅 추가
+                print('[DEBUG] NotificationsPage - unreadCount: ${response.unreadCount}');
+                print('[DEBUG] NotificationsPage - notifications count: ${response.notifications.length}');
+                print('[DEBUG] NotificationsPage - totalCount: ${response.totalCount}');
+                
+                return response.unreadCount > 0
+                  ? () async {
+                      await ref.read(notificationListProvider.notifier).markAllAsRead();
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('모든 알림을 읽음 처리했습니다'),
+                            backgroundColor: AppColors.success,
+                          ),
+                        );
+                      }
                     }
-                  }
-                : null,
+                  : null;
+              },
               orElse: () => null,
             ),
             child: Text(
