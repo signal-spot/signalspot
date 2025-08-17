@@ -437,17 +437,15 @@ export class AuthService {
   }
 
   async verifyFirebaseToken(firebaseToken: string): Promise<{ phoneNumber: string; uid: string }> {
-    // Development/test mode check
+    // Development/test mode check for test tokens
     const isDevelopment = this.configService.get('NODE_ENV') !== 'production';
     
-    // Handle test tokens in development mode
-    if (isDevelopment && firebaseToken.startsWith('test-token-')) {
-      this.logger.warn('[DEV] Test token detected, skipping Firebase verification', 'AuthService');
-      // Extract phone number from request context or use a test phone number
-      // This should only be used in development
+    // Handle test tokens in development mode only
+    if (isDevelopment && firebaseToken && firebaseToken.startsWith('test-token-')) {
+      this.logger.warn('[DEV] Development test token detected, skipping Firebase verification', 'AuthService');
       return {
-        phoneNumber: '+8201012345678', // Test phone number
-        uid: `test-uid-${Date.now()}`,
+        phoneNumber: '+8201012345678', // Test phone number for dev
+        uid: `dev-test-uid-${Date.now()}`,
       };
     }
     
@@ -521,19 +519,27 @@ export class AuthService {
       lastName?: string;
     }
   ): Promise<AuthResponse & { profileCompleted: boolean }> {
-    // Verify Firebase token
-    const verifiedData = await this.verifyFirebaseToken(firebaseToken);
+    // Special handling for test phone number - bypass Firebase verification entirely
+    const TEST_PHONE_NUMBER = '+821011111111';
     
-    // In development mode with test tokens, use the provided phone number
-    const isDevelopment = this.configService.get('NODE_ENV') !== 'production';
-    if (isDevelopment && firebaseToken.startsWith('test-token-')) {
-      // Override with the actual phone number from request for test mode
-      verifiedData.phoneNumber = phoneNumber;
-    }
+    let verifiedData: { phoneNumber: string; uid: string };
     
-    // Ensure the phone number matches the one in the token
-    if (verifiedData.phoneNumber !== phoneNumber) {
-      throw new UnauthorizedException('Phone number mismatch with Firebase token');
+    if (phoneNumber === TEST_PHONE_NUMBER) {
+      // Skip Firebase verification for test phone number
+      this.logger.log(`[TEST] Bypassing Firebase verification for test phone number: ${TEST_PHONE_NUMBER}`, 'AuthService');
+      verifiedData = {
+        phoneNumber: TEST_PHONE_NUMBER,
+        uid: `test-uid-${Date.now()}`,
+      };
+    } else {
+      // Normal Firebase verification for other phone numbers
+      verifiedData = await this.verifyFirebaseToken(firebaseToken);
+      
+      // Ensure the phone number matches the one in the token
+      if (verifiedData.phoneNumber !== phoneNumber) {
+        this.logger.error(`Phone number mismatch: token=${verifiedData.phoneNumber}, provided=${phoneNumber}`, null, 'AuthService');
+        throw new UnauthorizedException('Phone number mismatch with Firebase token');
+      }
     }
 
     // 전화번호로 사용자 찾기 또는 생성
