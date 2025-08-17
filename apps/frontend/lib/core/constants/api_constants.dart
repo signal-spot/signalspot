@@ -1,37 +1,32 @@
 
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
 class ApiConstants {
   // Base URLs from environment - Platform-specific
   static String get baseUrl {
     try {
-      // ngrok URL for development - works for both simulator and real device
-      const String ngrokUrl = 'http://3.39.206.100:3000/api';
-
-      // Use ngrok URL for universal access
-      return ngrokUrl;
-      
-      // Original platform-specific logic (uncomment when not using ngrok)
-      /*
-      // Check if we're running on web
-      if (kIsWeb) {
-        return dotenv.env['API_BASE_URL'] ?? 'http://localhost:3000/api';
-      }
-      
-      // For iOS simulator, use localhost
-      if (defaultTargetPlatform == TargetPlatform.iOS) {
-        return dotenv.env['API_BASE_URL_IOS'] ?? 'http://localhost:3000/api';
-      }
-      
-      // For Android emulator, use 10.0.2.2
-      if (defaultTargetPlatform == TargetPlatform.android) {
-        return dotenv.env['API_BASE_URL'] ?? 'http://10.0.2.2:3000/api';
-      }
-      
-      // Default fallback
-      return dotenv.env['API_BASE_URL'] ?? 'http://localhost:3000/api';
-      */
+      // Use environment variable if available
+      return dotenv.env['API_BASE_URL'] ?? 'https://lettie.co.kr/signalspot/api';
     } catch (e) {
-      // Universal fallback - using local network URL
-      return 'http://192.168.45.77:3000/api';
+      // Universal fallback
+      return 'https://lettie.co.kr/signalspot/api';
+    }
+  }
+  
+  // WebSocket Configuration
+  static String get wsUrl {
+    try {
+      return dotenv.env['WS_URL'] ?? 'https://lettie.co.kr:443';
+    } catch (e) {
+      return 'https://lettie.co.kr:443';
+    }
+  }
+  
+  static String get wsPath {
+    try {
+      return dotenv.env['WS_PATH'] ?? '/signalspot/socket.io/';
+    } catch (e) {
+      return '/signalspot/socket.io/';
     }
   }
   

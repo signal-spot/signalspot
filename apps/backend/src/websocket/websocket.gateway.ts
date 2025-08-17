@@ -26,7 +26,6 @@ interface AuthenticatedSocket extends Socket {
     origin: '*', // In production, specify allowed origins
     credentials: true,
   },
-  namespace: '/ws',
 })
 export class AppWebSocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()

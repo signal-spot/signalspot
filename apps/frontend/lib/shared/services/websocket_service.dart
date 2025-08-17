@@ -21,16 +21,20 @@ class WebSocketService extends ChangeNotifier {
       return;
     }
 
-    final baseUrl = ApiConstants.baseUrl.replaceFirst('/api', '');
-    debugPrint('Connecting to WebSocket at $baseUrl/ws');
+    // WebSocket URL을 환경 변수에서 가져오기
+    final wsUrl = ApiConstants.wsUrl;
+    final wsPath = ApiConstants.wsPath;
+    debugPrint('Connecting to WebSocket at $wsUrl with path: $wsPath');
 
     _socket = IO.io(
-      '$baseUrl/ws',
+      wsUrl,
       IO.OptionBuilder()
           .setTransports(['websocket'])
+          .setPath(wsPath)
           .setAuth({'token': token})
           .setQuery({'token': token})
           .enableAutoConnect()
+          .enableForceNew()
           .build(),
     );
 
@@ -58,16 +62,38 @@ class WebSocketService extends ChangeNotifier {
       debugPrint('WebSocket error: $error');
       _emitEvent('error', error);
     });
+    
+    // Debug: Listen for ANY event to see what the server is sending
+    _socket!.onAny((event, data) {
+      debugPrint('🌐 WebSocket ANY Event: $event');
+      debugPrint('📦 Event data: $data');
+    });
 
     // Listen for new messages in chat rooms
     _socket!.on('messageReceived', (data) {
-      debugPrint('New message received: $data');
+      debugPrint('🔔 WebSocket Event: messageReceived');
+      debugPrint('📨 Message data: $data');
       _emitEvent('messageReceived', data);
     });
     
     // Also support legacy event name for backward compatibility
     _socket!.on('newMessage', (data) {
-      debugPrint('New message received (legacy): $data');
+      debugPrint('🔔 WebSocket Event: newMessage (legacy)');
+      debugPrint('📨 Message data: $data');
+      _emitEvent('messageReceived', data);
+    });
+    
+    // Listen for chat message event (another possible event name)
+    _socket!.on('chatMessage', (data) {
+      debugPrint('🔔 WebSocket Event: chatMessage');
+      debugPrint('📨 Message data: $data');
+      _emitEvent('messageReceived', data);
+    });
+    
+    // Listen for message event (generic)
+    _socket!.on('message', (data) {
+      debugPrint('🔔 WebSocket Event: message');
+      debugPrint('📨 Message data: $data');
       _emitEvent('messageReceived', data);
     });
 
