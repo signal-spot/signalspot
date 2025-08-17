@@ -54,86 +54,158 @@ export class NotificationService implements OnModuleInit {
 
   private initializeFirebase() {
     try {
+      this.logger.debug('Starting Firebase initialization...', 'NotificationService');
+      
       // Check if Firebase Admin is available
       if (!admin) {
-        this.logger.warn('Firebase Admin SDK not available', 'NotificationService');
+        this.logger.warn('Firebase Admin SDK not available - module not installed', 'NotificationService');
         return;
       }
+      this.logger.debug('Firebase Admin SDK module is available', 'NotificationService');
 
       // Check if already initialized
       if (admin.apps.length > 0) {
         this.firebaseApp = admin.app();
         this.logger.log('Firebase Admin SDK already initialized', 'NotificationService');
+        this.logger.debug(`Existing Firebase app project ID: ${this.firebaseApp.options?.projectId}`, 'NotificationService');
         return;
       }
+      this.logger.debug('No existing Firebase apps found, proceeding with initialization', 'NotificationService');
 
       // Initialize Firebase Admin SDK
       const serviceAccount = this.configService.get('firebase.serviceAccount');
+      this.logger.debug(`Service account from config: ${serviceAccount ? 'Found' : 'Not found'}`, 'NotificationService');
       
       if (!serviceAccount) {
-        this.logger.warn('Firebase service account not configured', 'NotificationService');
+        this.logger.warn('Firebase service account not configured - firebase.serviceAccount is null', 'NotificationService');
+        this.logger.debug('Checking firebase config structure...', 'NotificationService');
+        const firebaseConfig = this.configService.get('firebase');
+        this.logger.debug(`Firebase config keys: ${firebaseConfig ? Object.keys(firebaseConfig).join(', ') : 'config is null'}`, 'NotificationService');
         return;
       }
 
       // Validate service account has required properties
+      this.logger.debug('Validating service account properties...', 'NotificationService');
+      this.logger.debug(`Service account keys: ${Object.keys(serviceAccount).join(', ')}`, 'NotificationService');
+      
       if (!serviceAccount.private_key || typeof serviceAccount.private_key !== 'string') {
         this.logger.error('Invalid Firebase service account: missing or invalid private_key', null, 'NotificationService');
         this.logger.error(`private_key exists: ${!!serviceAccount.private_key}, type: ${typeof serviceAccount.private_key}`, null, 'NotificationService');
+        this.logger.error(`private_key length: ${serviceAccount.private_key ? serviceAccount.private_key.length : 0}`, null, 'NotificationService');
         
         // Check if it's an empty string or placeholder
         if (serviceAccount.private_key === '') {
           this.logger.error('private_key is an empty string', null, 'NotificationService');
         } else if (serviceAccount.private_key && !serviceAccount.private_key.includes('-----BEGIN')) {
           this.logger.error('private_key does not contain valid PEM format', null, 'NotificationService');
+          this.logger.error(`private_key first 50 chars: ${serviceAccount.private_key.substring(0, 50)}`, null, 'NotificationService');
         }
         return;
       }
+      this.logger.debug('private_key validation passed', 'NotificationService');
 
       if (!serviceAccount.client_email || typeof serviceAccount.client_email !== 'string') {
         this.logger.error('Invalid Firebase service account: missing or invalid client_email', null, 'NotificationService');
+        this.logger.error(`client_email: ${serviceAccount.client_email}`, null, 'NotificationService');
         return;
       }
+      this.logger.debug(`client_email: ${serviceAccount.client_email}`, 'NotificationService');
 
       if (!serviceAccount.project_id || typeof serviceAccount.project_id !== 'string') {
         this.logger.error('Invalid Firebase service account: missing or invalid project_id', null, 'NotificationService');
+        this.logger.error(`project_id: ${serviceAccount.project_id}`, null, 'NotificationService');
         return;
       }
+      this.logger.debug(`project_id: ${serviceAccount.project_id}`, 'NotificationService');
 
       // Initialize with validated service account
+      this.logger.debug('Attempting to initialize Firebase Admin SDK...', 'NotificationService');
+      this.logger.debug('Creating credential with service account...', 'NotificationService');
+      
+      const credential = admin.credential.cert({
+        projectId: serviceAccount.project_id,
+        clientEmail: serviceAccount.client_email,
+        privateKey: serviceAccount.private_key.replace(/\\n/g, '\n'), // Handle escaped newlines
+      });
+      
+      this.logger.debug('Credential created successfully', 'NotificationService');
+      
       this.firebaseApp = admin.initializeApp({
-        credential: admin.credential.cert({
-          projectId: serviceAccount.project_id,
-          clientEmail: serviceAccount.client_email,
-          privateKey: serviceAccount.private_key.replace(/\\n/g, '\n'), // Handle escaped newlines
-        }),
+        credential: credential,
         projectId: serviceAccount.project_id,
       });
 
       this.logger.log('Firebase Admin SDK initialized successfully', 'NotificationService');
+      this.logger.debug(`Firebase app initialized with project ID: ${this.firebaseApp.options?.projectId}`, 'NotificationService');
+      this.logger.debug(`Firebase app name: ${this.firebaseApp.name}`, 'NotificationService');
     } catch (error) {
       this.logger.error('Failed to initialize Firebase Admin SDK:', error.message, 'NotificationService');
+      this.logger.error(`Error type: ${error.constructor.name}`, null, 'NotificationService');
+      this.logger.error(`Error code: ${error.code || 'N/A'}`, null, 'NotificationService');
+      this.logger.error(`Full error: ${JSON.stringify(error, null, 2)}`, null, 'NotificationService');
       this.logger.error(error.stack, null, 'NotificationService');
-      throw new Error('Firebase Admin SDK initialization failed. Push notifications are required.');
+      
+      // Don't throw in production to prevent app crash
+      if (process.env.NODE_ENV === 'production') {
+        this.logger.error('Firebase initialization failed in production - push notifications disabled', null, 'NotificationService');
+      } else {
+        throw new Error('Firebase Admin SDK initialization failed. Push notifications are required.');
+      }
     }
   }
 
   async sendNotification(payload: NotificationPayload): Promise<boolean> {
     try {
-      this.logger.debug(`sendNotification called with payload: ${JSON.stringify(payload)}`, 'NotificationService');
+      this.logger.debug('=== sendNotification START ===', 'NotificationService');
+      this.logger.debug(`Payload type: ${payload.type}`, 'NotificationService');
+      this.logger.debug(`User ID: ${payload.userId}`, 'NotificationService');
+      this.logger.debug(`Title: ${payload.title}`, 'NotificationService');
+      this.logger.debug(`Body: ${payload.body}`, 'NotificationService');
+      this.logger.debug(`Priority: ${payload.priority || 'normal'}`, 'NotificationService');
+      this.logger.debug(`Data: ${JSON.stringify(payload.data)}`, 'NotificationService');
       
       // Check if Firebase Admin is available
-      if (!admin || !this.firebaseApp) {
-        this.logger.warn('Firebase Admin SDK not initialized, skipping notification', 'NotificationService');
+      if (!admin) {
+        this.logger.warn('Firebase Admin SDK module not available, skipping notification', 'NotificationService');
         return false;
       }
+      
+      if (!this.firebaseApp) {
+        this.logger.warn('Firebase app not initialized, skipping notification', 'NotificationService');
+        this.logger.debug('Attempting to re-initialize Firebase...', 'NotificationService');
+        this.initializeFirebase();
+        
+        if (!this.firebaseApp) {
+          this.logger.error('Failed to re-initialize Firebase', null, 'NotificationService');
+          return false;
+        }
+      }
+      
+      this.logger.debug('Firebase Admin SDK is ready for sending', 'NotificationService');
 
+      this.logger.debug(`Fetching user with ID: ${payload.userId}`, 'NotificationService');
       const user = await this.userRepository.findOne({ id: payload.userId });
 
-      if (!user?.fcmToken) {
-        this.logger.debug(`No FCM token for user ${payload.userId}`, 'NotificationService');
+      if (!user) {
+        this.logger.warn(`User not found: ${payload.userId}`, 'NotificationService');
         return false;
       }
+      
+      this.logger.debug(`User found: ${user.username || user.email}`, 'NotificationService');
+      
+      if (!user.fcmToken) {
+        this.logger.debug(`No FCM token for user ${payload.userId} (${user.username || user.email})`, 'NotificationService');
+        return false;
+      }
+      
+      this.logger.debug(`FCM token found for user: ${user.fcmToken.substring(0, 20)}...`, 'NotificationService');
 
+      const unreadCount = await this.getUserUnreadCount(payload.userId);
+      this.logger.debug(`User unread count: ${unreadCount}`, 'NotificationService');
+      
+      const channelId = this.getNotificationChannelId(payload.type);
+      this.logger.debug(`Notification channel ID: ${channelId}`, 'NotificationService');
+      
       const message: any = {
         token: user.fcmToken,
         notification: {
@@ -151,7 +223,7 @@ export class NotificationService implements OnModuleInit {
           notification: {
             icon: payload.icon || 'ic_notification',
             sound: payload.sound || 'default',
-            channelId: this.getNotificationChannelId(payload.type),
+            channelId: channelId,
             priority: payload.priority === 'high' ? 'high' : 'default',
           },
         },
@@ -163,23 +235,62 @@ export class NotificationService implements OnModuleInit {
                 body: payload.body,
               },
               sound: payload.sound || 'default',
-              badge: await this.getUserUnreadCount(payload.userId),
+              badge: unreadCount,
               contentAvailable: true,
               category: payload.type,
             },
           },
         },
       };
+      
+      this.logger.debug('FCM message object created', 'NotificationService');
+      this.logger.debug(`Message structure: ${JSON.stringify({
+        hasToken: !!message.token,
+        hasNotification: !!message.notification,
+        hasData: !!message.data,
+        hasAndroid: !!message.android,
+        hasApns: !!message.apns,
+      })}`, 'NotificationService');
 
-      const response = await admin.messaging().send(message);
-      this.logger.debug(`Notification sent successfully: ${response}`, 'NotificationService');
+      this.logger.debug('Sending FCM message...', 'NotificationService');
+      
+      try {
+        const response = await admin.messaging().send(message);
+        this.logger.log(`✅ Notification sent successfully`, 'NotificationService');
+        this.logger.debug(`FCM response: ${response}`, 'NotificationService');
+        this.logger.debug(`Message ID: ${response}`, 'NotificationService');
 
-      // Store notification in database for history
-      await this.storeNotification(payload);
-
-      return true;
+        // Store notification in database for history
+        this.logger.debug('Storing notification in database...', 'NotificationService');
+        await this.storeNotification(payload);
+        this.logger.debug('Notification stored in database', 'NotificationService');
+        
+        this.logger.debug('=== sendNotification SUCCESS ===', 'NotificationService');
+        return true;
+      } catch (fcmError) {
+        this.logger.error('FCM send failed', fcmError.stack, 'NotificationService');
+        this.logger.error(`FCM error code: ${fcmError.code || 'N/A'}`, null, 'NotificationService');
+        this.logger.error(`FCM error message: ${fcmError.message}`, null, 'NotificationService');
+        
+        // Check for specific FCM errors
+        if (fcmError.code === 'messaging/invalid-registration-token' || 
+            fcmError.code === 'messaging/registration-token-not-registered') {
+          this.logger.warn(`Invalid FCM token for user ${payload.userId}, removing token`, 'NotificationService');
+          await this.removeUserFCMToken(payload.userId);
+        } else if (fcmError.code === 'messaging/invalid-argument') {
+          this.logger.error(`Invalid message format: ${JSON.stringify(message)}`, null, 'NotificationService');
+        } else if (fcmError.code === 'messaging/authentication-error') {
+          this.logger.error('Firebase authentication error - check service account credentials', null, 'NotificationService');
+        }
+        
+        throw fcmError;
+      }
     } catch (error) {
-      this.logger.error('Failed to send notification', error.stack, 'NotificationService');
+      this.logger.error('❌ Failed to send notification', error.stack, 'NotificationService');
+      this.logger.error(`Error type: ${error.constructor.name}`, null, 'NotificationService');
+      this.logger.error(`Error message: ${error.message}`, null, 'NotificationService');
+      this.logger.error(`Full error: ${JSON.stringify(error, Object.getOwnPropertyNames(error), 2)}`, null, 'NotificationService');
+      this.logger.debug('=== sendNotification FAILED ===', 'NotificationService');
       return false;
     }
   }
@@ -789,6 +900,24 @@ export class NotificationService implements OnModuleInit {
   async onModuleInit() {
     // Initialize Firebase when the module is ready
     this.logger.log('Initializing NotificationService...', 'NotificationService');
+    
+    // Debug: Log environment variables
+    this.logger.debug(`NODE_ENV: ${process.env.NODE_ENV}`, 'NotificationService');
+    this.logger.debug(`Current working directory: ${process.cwd()}`, 'NotificationService');
+    this.logger.debug(`FIREBASE_SERVICE_ACCOUNT_FILE: ${process.env.FIREBASE_SERVICE_ACCOUNT_FILE}`, 'NotificationService');
+    this.logger.debug(`FIREBASE_SERVICE_ACCOUNT_PATH: ${process.env.FIREBASE_SERVICE_ACCOUNT_PATH}`, 'NotificationService');
+    this.logger.debug(`FIREBASE_PROJECT_ID: ${process.env.FIREBASE_PROJECT_ID}`, 'NotificationService');
+    this.logger.debug(`ENABLE_PUSH_NOTIFICATIONS: ${process.env.ENABLE_PUSH_NOTIFICATIONS}`, 'NotificationService');
+    
+    // Check if Firebase config exists
+    const firebaseConfig = this.configService.get('firebase');
+    this.logger.debug(`Firebase config exists: ${!!firebaseConfig}`, 'NotificationService');
+    if (firebaseConfig) {
+      this.logger.debug(`Firebase config.enabled: ${firebaseConfig.enabled}`, 'NotificationService');
+      this.logger.debug(`Firebase config.projectId: ${firebaseConfig.projectId}`, 'NotificationService');
+      this.logger.debug(`Firebase config.serviceAccount exists: ${!!firebaseConfig.serviceAccount}`, 'NotificationService');
+    }
+    
     this.initializeFirebase();
   }
 }
