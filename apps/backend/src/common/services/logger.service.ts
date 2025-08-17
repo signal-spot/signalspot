@@ -69,8 +69,9 @@ export class LoggerService implements NestLoggerService {
     }
 
     // Create winston logger
+    // Changed: Always use debug as default unless explicitly set in LOG_LEVEL
     this.logger = winston.createLogger({
-      level: process.env.LOG_LEVEL || (process.env.NODE_ENV === 'production' ? 'info' : 'debug'),
+      level: process.env.LOG_LEVEL || 'debug', // Changed from conditional to always debug by default
       format: logFormat,
       transports,
     });

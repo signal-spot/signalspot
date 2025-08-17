@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node dist/main.js",
     "start:dev": "NODE_ENV=development ts-node-dev --respawn --transpile-only --project tsconfig.app.json src/main.ts",
-    "start:prod": "NODE_ENV=production node dist/main.js",
+    "start:prod": "NODE_ENV=production LOG_LEVEL=debug node dist/main.js",
     "start:debug": "nest start --debug --watch",
     "dev": "NODE_ENV=development npm run start:dev",
     "prod": "NODE_ENV=production npm run start:prod",
