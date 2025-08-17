@@ -64,11 +64,6 @@ export class SignalSpotDomainService {
       tags?: string[];
     } = {}
   ): Promise<SignalSpot[]> {
-    // Business Rule: Check user's location sharing preferences
-    // Skip location tracking check in development mode
-    if (!user.locationTrackingEnabled && process.env.NODE_ENV !== 'development') {
-      throw new Error('Location tracking must be enabled to view nearby spots');
-    }
 
     // Get spots that the user can view
     const spots = await this.signalSpotRepository.findViewableByUser(
