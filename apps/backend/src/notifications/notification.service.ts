@@ -52,7 +52,7 @@ export class NotificationService implements OnModuleInit {
     // Initialize Firebase in onModuleInit instead
   }
 
-  private initializeFirebase() {
+  private async initializeFirebase() {
     try {
       this.logger.debug('Starting Firebase initialization...', 'NotificationService');
       
@@ -65,12 +65,35 @@ export class NotificationService implements OnModuleInit {
 
       // Check if already initialized
       if (admin.apps.length > 0) {
+        this.logger.log(`Firebase Admin SDK already initialized (${admin.apps.length} app(s))`, 'NotificationService');
         this.firebaseApp = admin.app();
-        this.logger.log('Firebase Admin SDK already initialized', 'NotificationService');
-        this.logger.debug(`Existing Firebase app project ID: ${this.firebaseApp.options?.projectId}`, 'NotificationService');
-        return;
+        
+        // Debug existing app details
+        this.logger.debug(`App name: ${this.firebaseApp.name}`, 'NotificationService');
+        this.logger.debug(`App options exist: ${!!this.firebaseApp.options}`, 'NotificationService');
+        
+        if (this.firebaseApp.options) {
+          this.logger.debug(`Existing app projectId: ${this.firebaseApp.options.projectId || 'undefined'}`, 'NotificationService');
+          this.logger.debug(`Existing app credential: ${!!this.firebaseApp.options.credential ? 'present' : 'missing'}`, 'NotificationService');
+          this.logger.debug(`All app options keys: ${Object.keys(this.firebaseApp.options).join(', ')}`, 'NotificationService');
+        }
+        
+        // Force re-initialization if project ID is missing
+        if (!this.firebaseApp.options?.projectId) {
+          this.logger.warn('Existing Firebase app has no project ID, attempting to delete and re-initialize', 'NotificationService');
+          try {
+            await admin.app().delete();
+            this.logger.debug('Deleted existing Firebase app', 'NotificationService');
+            this.firebaseApp = null;
+          } catch (deleteError) {
+            this.logger.error('Failed to delete existing Firebase app', deleteError.message, 'NotificationService');
+            return;
+          }
+        } else {
+          return;
+        }
       }
-      this.logger.debug('No existing Firebase apps found, proceeding with initialization', 'NotificationService');
+      this.logger.debug('No existing Firebase apps found or deleted, proceeding with initialization', 'NotificationService');
 
       // Initialize Firebase Admin SDK
       const serviceAccount = this.configService.get('firebase.serviceAccount');
@@ -918,7 +941,7 @@ export class NotificationService implements OnModuleInit {
       this.logger.debug(`Firebase config.serviceAccount exists: ${!!firebaseConfig.serviceAccount}`, 'NotificationService');
     }
     
-    this.initializeFirebase();
+    await this.initializeFirebase();
   }
 }
 
