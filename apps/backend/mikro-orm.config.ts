@@ -13,6 +13,7 @@ import { Message } from './src/entities/message.entity';
 import { BlockedUser } from './src/entities/blocked-user.entity';
 import { Report } from './src/entities/report.entity';
 import { Comment } from './src/entities/comment.entity';
+import { AppVersion } from './src/app-version/entities/app-version.entity';
 import * as dotenv from 'dotenv';
 
 // Load environment variables based on NODE_ENV
@@ -34,7 +35,7 @@ export default defineConfig({
   user: process.env.DB_USERNAME || 'postgres',
   password: process.env.DB_PASSWORD || 'postgres',
   dbName: process.env.DB_DATABASE || process.env.DB_NAME || 'signalspot',
-  entities: [User, Location, SignalSpot, Spark, LocationHistory, SacredSite, SiteActivity, Notification, ChatRoom, Message, BlockedUser, Report, Comment],
+  entities: [User, Location, SignalSpot, Spark, LocationHistory, SacredSite, SiteActivity, Notification, ChatRoom, Message, BlockedUser, Report, Comment, AppVersion],
   debug: process.env.NODE_ENV !== 'production',
   // PostgreSQL 타임존 설정
   pool: {

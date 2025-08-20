@@ -21,6 +21,7 @@ import { ChatModule } from '../chat/chat.module';
 import { WebSocketModule } from '../websocket/websocket.module';
 import { UserModule } from '../user/user.module';
 import { ReportModule } from '../report/report.module';
+import { AppVersionModule } from '../app-version/app-version.module';
 import { CacheModule } from '../common/cache/cache.module';
 import { CommonModule } from '../common/common.module';
 import { databaseConfig } from '../database/database.config';
@@ -63,6 +64,7 @@ import { CacheInterceptor } from '../common/interceptors/cache.interceptor';
     WebSocketModule,
     UserModule,
     ReportModule,
+    AppVersionModule,
   ],
   controllers: [AppController],
   providers: [
