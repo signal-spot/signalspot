@@ -105,7 +105,7 @@ export class AppVersionService {
         isActive: dto.isActive ?? true,
       });
 
-      await this.appVersionRepository.persistAndFlush(appVersion);
+      await this.appVersionRepository.getEntityManager().persistAndFlush(appVersion);
 
       this.logger.log(
         `Created new app version ${dto.version} for platform ${dto.platform}`
@@ -150,7 +150,7 @@ export class AppVersionService {
       }
 
       Object.assign(appVersion, dto);
-      await this.appVersionRepository.persistAndFlush(appVersion);
+      await this.appVersionRepository.getEntityManager().persistAndFlush(appVersion);
 
       this.logger.log(`Updated app version ${id}`);
 
@@ -210,7 +210,7 @@ export class AppVersionService {
         throw new NotFoundException('App version not found');
       }
 
-      await this.appVersionRepository.removeAndFlush(appVersion);
+      await this.appVersionRepository.getEntityManager().removeAndFlush(appVersion);
 
       this.logger.log(`Deleted app version ${id}`);
     } catch (error) {
