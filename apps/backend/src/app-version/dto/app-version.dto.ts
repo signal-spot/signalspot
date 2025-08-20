@@ -81,6 +81,11 @@ export class CreateAppVersionDto {
   @IsUrl()
   updateUrl: string;
 
+  @ApiPropertyOptional({ description: 'Whether to force update for older versions', default: false })
+  @IsOptional()
+  @IsBoolean()
+  forceUpdate?: boolean;
+
   @ApiPropertyOptional({ description: 'Whether this version is active', default: true })
   @IsOptional()
   @IsBoolean()
@@ -120,6 +125,11 @@ export class UpdateAppVersionDto {
   @IsOptional()
   @IsUrl()
   updateUrl?: string;
+
+  @ApiPropertyOptional({ description: 'Whether to force update for older versions' })
+  @IsOptional()
+  @IsBoolean()
+  forceUpdate?: boolean;
 
   @ApiPropertyOptional({ description: 'Whether this version is active' })
   @IsOptional()

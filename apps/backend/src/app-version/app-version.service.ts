@@ -48,7 +48,8 @@ export class AppVersionService {
       }
 
       const needsUpdate = latestVersion.needsUpdate(dto.currentVersion);
-      const forceUpdate = latestVersion.requiresForceUpdate(dto.currentVersion);
+      // Use the forceUpdate field from database directly
+      const forceUpdate = latestVersion.forceUpdate && needsUpdate;
 
       this.logger.log(
         `Version check for ${dto.platform}: current=${dto.currentVersion}, latest=${latestVersion.version}, needsUpdate=${needsUpdate}, forceUpdate=${forceUpdate}`
@@ -100,6 +101,7 @@ export class AppVersionService {
 
       const appVersion = this.appVersionRepository.create({
         ...dto,
+        forceUpdate: dto.forceUpdate ?? false,
         isActive: dto.isActive ?? true,
       });
 

@@ -14,6 +14,7 @@ export class Migration20250820_AddAppVersionTable extends Migration {
         min_required_version VARCHAR(50) NOT NULL,
         release_notes TEXT,
         update_url VARCHAR(500) NOT NULL,
+        force_update BOOLEAN DEFAULT false,
         is_active BOOLEAN DEFAULT true,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP

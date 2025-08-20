@@ -26,6 +26,9 @@ export class AppVersion {
   @Property()
   updateUrl!: string;
 
+  @Property({ default: false })
+  forceUpdate: boolean = false;
+
   @Property({ default: true })
   isActive: boolean = true;
 
