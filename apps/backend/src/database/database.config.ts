@@ -13,6 +13,7 @@ import { ChatRoom } from '../entities/chat-room.entity';
 import { Message } from '../entities/message.entity';
 import { BlockedUser } from '../entities/blocked-user.entity';
 import { Report } from '../entities/report.entity';
+import { AppVersion } from '../app-version/entities/app-version.entity';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 
@@ -33,7 +34,7 @@ export const databaseConfig: Options = {
   user: process.env.DB_USERNAME || 'postgres',
   password: process.env.DB_PASSWORD || 'postgres',
   dbName: process.env.DB_DATABASE || process.env.DB_NAME || 'signalspot',
-  entities: [User, Location, SignalSpot, Spark, LocationHistory, SacredSite, SiteActivity, Notification, ChatRoom, Message, Comment, BlockedUser, Report],
+  entities: [User, Location, SignalSpot, Spark, LocationHistory, SacredSite, SiteActivity, Notification, ChatRoom, Message, Comment, BlockedUser, Report, AppVersion],
   debug: process.env.NODE_ENV !== 'production',
   // Auto-sync schema in development (creates missing tables)
   schemaGenerator: {
