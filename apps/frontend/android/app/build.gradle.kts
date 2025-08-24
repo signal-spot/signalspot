@@ -20,7 +20,7 @@ plugins {
 
 android {
     namespace = "com.signalspot.frontend"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 36  // 플러그인 호환성을 위해 36 사용 (하위 호환)
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -39,7 +39,7 @@ android {
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = 23  // Android 6.0+ for background location
-        targetSdk = 34  // Android 14
+        targetSdk = 35  // Android 15 - Google Play 요구사항 (2025년 8월 31일부터 필수)
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         multiDexEnabled = true
