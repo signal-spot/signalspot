@@ -298,18 +298,12 @@ class _SmsVerificationPageState extends ConsumerState<SmsVerificationPage>
         if (profileCompleted != true) {  // 명시적으로 true가 아니면 온보딩으로
           print('SMS 인증 완료: 프로필 미완성 (profileCompleted=$profileCompleted) - 온보딩으로 이동');
           
-          // SharedPreferences에서 저장된 닉네임 확인 (선택사항)
+          // 기존 닉네임 데이터 초기화
           final prefs = await SharedPreferences.getInstance();
-          final pendingNickname = prefs.getString('pending_nickname');
+          await prefs.remove('pending_nickname');
           
-          if (pendingNickname != null && pendingNickname.isNotEmpty) {
-            print('저장된 닉네임 발견: $pendingNickname');
-            // 닉네임은 프로필 설정 페이지에서 처리
-            await prefs.remove('pending_nickname');
-          }
-          
-          // 프로필 설정으로 이동 (온보딩 플로우)
-          context.go('/onboarding/profile');
+          // 온보딩 시작 페이지로 이동 (모든 사용자가 처음부터 온보딩을 거침)
+          context.go('/onboarding/welcome');
         } else {
           print('SMS 인증 완료: 프로필 완성 - 홈으로 이동');
           // GoRouter를 사용하여 이동
@@ -449,15 +443,10 @@ class _SmsVerificationPageState extends ConsumerState<SmsVerificationPage>
               opacity: _fadeAnimation,
               child: SingleChildScrollView( // 스크롤 가능하게 변경
                 padding: const EdgeInsets.all(AppSpacing.lg),
-                child: SizedBox(
-                  height: MediaQuery.of(context).size.height - 
-                         MediaQuery.of(context).padding.top - 
-                         MediaQuery.of(context).padding.bottom - 
-                         kToolbarHeight - 
-                         (AppSpacing.lg * 2), // SafeArea와 padding 고려
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
                   const SizedBox(height: AppSpacing.xl),
                   
                   // 타이틀
@@ -602,7 +591,7 @@ class _SmsVerificationPageState extends ConsumerState<SmsVerificationPage>
                       ),
                     ),
                   
-                  const Spacer(),
+                  const SizedBox(height: AppSpacing.xxl),
                   
                   // 도움말
                   Container(
@@ -637,7 +626,6 @@ class _SmsVerificationPageState extends ConsumerState<SmsVerificationPage>
                   
                   const SizedBox(height: AppSpacing.lg),
                     ],
-                  ),
                 ),
               ),
             ),

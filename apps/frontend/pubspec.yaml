@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+1
+version: 1.0.0+3
 
 environment:
   sdk: ^3.9.0-128.0.dev
@@ -63,7 +63,7 @@ dependencies:
   
   # Image & Media
   image_picker: ^1.1.2
-  image_cropper: ^5.0.1
+  image_cropper: ^8.0.2
   cached_network_image: ^3.4.1
   
   # Utils
@@ -81,6 +81,13 @@ dependencies:
   # Security
   crypto: ^3.0.5
   encrypt: ^5.0.3
+  
+  # App version & info
+  package_info_plus: ^8.0.3
+  
+  # App icon & splash (moved from dev_dependencies)
+  flutter_launcher_icons: ^0.13.1
+  flutter_native_splash: ^2.4.1
 
 dev_dependencies:
   flutter_test:
@@ -92,10 +99,6 @@ dev_dependencies:
   retrofit_generator: ^9.1.2
   json_serializable: ^6.8.0
   freezed: ^2.5.7
-  
-  # App icon & splash
-  flutter_launcher_icons: ^0.13.1
-  flutter_native_splash: ^2.4.1
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

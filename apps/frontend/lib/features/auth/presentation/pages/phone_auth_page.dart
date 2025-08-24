@@ -31,6 +31,7 @@ class _PhoneAuthPageState extends ConsumerState<PhoneAuthPage>
   bool _isValid = false;
   bool _isLoading = false;
   bool _agreedToPrivacyPolicy = false; // 개인정보처리방침 동의 여부
+  bool _agreedToTermsOfService = false; // 서비스 이용약관 동의 여부
 
   @override
   void initState() {
@@ -284,15 +285,10 @@ class _PhoneAuthPageState extends ConsumerState<PhoneAuthPage>
               opacity: _fadeAnimation,
               child: SingleChildScrollView( // 스크롤 가능하게 변경
                 padding: const EdgeInsets.all(AppSpacing.lg),
-                child: SizedBox(
-                  height: MediaQuery.of(context).size.height - 
-                         MediaQuery.of(context).padding.top - 
-                         MediaQuery.of(context).padding.bottom - 
-                         kToolbarHeight - 
-                         (AppSpacing.lg * 2), // SafeArea와 padding 고려
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
                   const SizedBox(height: AppSpacing.xl),
 
                   // 타이틀
@@ -558,17 +554,102 @@ class _PhoneAuthPageState extends ConsumerState<PhoneAuthPage>
                     ),
                   ),
 
-                  const Spacer(),
+                  const SizedBox(height: AppSpacing.md),
+                  
+                  // 서비스 이용약관 동의 체크박스
+                  Container(
+                    padding: const EdgeInsets.all(AppSpacing.md),
+                    decoration: BoxDecoration(
+                      color: AppColors.grey50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: _agreedToTermsOfService 
+                            ? AppColors.primary.withOpacity(0.3)
+                            : AppColors.grey200,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: Checkbox(
+                            value: _agreedToTermsOfService,
+                            onChanged: (value) {
+                              setState(() {
+                                _agreedToTermsOfService = value ?? false;
+                              });
+                            },
+                            activeColor: AppColors.primary,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _agreedToTermsOfService = !_agreedToTermsOfService;
+                              });
+                            },
+                            child: RichText(
+                              text: TextSpan(
+                                style: AppTextStyles.bodySmall.copyWith(
+                                  color: AppColors.textSecondary,
+                                ),
+                                children: [
+                                  const TextSpan(text: '시그널스팟 '),
+                                  WidgetSpan(
+                                    child: GestureDetector(
+                                      onTap: () async {
+                                        final url = Uri.parse('https://relic-baboon-412.notion.site/250766a8bb4680419472d283a09bf8c6');
+                                        try {
+                                          await launchUrl(url, mode: LaunchMode.externalApplication);
+                                        } catch (e) {
+                                          print('Could not launch URL: $e');
+                                          // 에러 발생 시 스낵바 표시
+                                          if (context.mounted) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              const SnackBar(
+                                                content: Text('링크를 열 수 없습니다'),
+                                              ),
+                                            );
+                                          }
+                                        }
+                                      },
+                                      child: Text(
+                                        '서비스 이용약관',
+                                        style: AppTextStyles.bodySmall.copyWith(
+                                          color: AppColors.primary,
+                                          fontWeight: FontWeight.w600,
+                                          decoration: TextDecoration.underline,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const TextSpan(text: '에 동의합니다'),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: AppSpacing.xxl),
 
                   // 인증코드 받기 버튼
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: _isValid && !_isLoading && _agreedToPrivacyPolicy
+                      onPressed: _isValid && !_isLoading && _agreedToPrivacyPolicy && _agreedToTermsOfService
                           ? _sendVerificationCode
                           : null,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: _isValid && _agreedToPrivacyPolicy
+                        backgroundColor: _isValid && _agreedToPrivacyPolicy && _agreedToTermsOfService
                             ? AppColors.primary
                             : AppColors.grey300,
                         foregroundColor: Colors.white,
@@ -617,7 +698,6 @@ class _PhoneAuthPageState extends ConsumerState<PhoneAuthPage>
 
                   const SizedBox(height: AppSpacing.lg),
                     ],
-                  ),
                 ),
               ),
             ),

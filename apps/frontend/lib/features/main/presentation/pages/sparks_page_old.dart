@@ -397,7 +397,7 @@ class _SparksPageState extends ConsumerState<SparksPage>
                         ),
                         const SizedBox(height: AppSpacing.sm),
                         Text(
-                          '백그라운드에서 근처의 사람들을 안전하게 감지합니다',
+                          '앱이 화면에 표시되어 있을 때만 스파크 매칭이 작동합니다',
                           style: AppTextStyles.bodySmall.copyWith(
                             color: AppColors.grey600,
                             fontStyle: FontStyle.italic,

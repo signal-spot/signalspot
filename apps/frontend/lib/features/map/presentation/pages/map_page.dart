@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:go_router/go_router.dart';
+import 'package:geolocator/geolocator.dart';
 import 'dart:ui' as ui;
 import '../../../../shared/providers/signal_provider.dart';
 import '../../../../shared/providers/location_provider.dart';
@@ -73,6 +74,34 @@ class _MapPageState extends ConsumerState<MapPage> with AutomaticKeepAliveClient
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadInitialData();
     });
+  }
+  
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    
+    // 다른 페이지에서 돌아왔을 때 마커 업데이트
+    final route = ModalRoute.of(context);
+    if (route?.isCurrent == true && _currentPosition != null) {
+      print('🔄 MapPage로 돌아옴 - 데이터 새로고침 및 마커 업데이트');
+      
+      // Provider가 invalidate되었을 때 데이터 다시 로드
+      Future.delayed(const Duration(milliseconds: 500), () async {
+        if (mounted && _currentPosition != null) {
+          // 현재 위치 기준으로 Signal Spot 다시 로드
+          final position = _currentPosition!;
+          await ref.read(nearbySignalSpotsProvider.notifier).loadNearbySpots(
+            latitude: position.latitude,
+            longitude: position.longitude,
+            radiusKm: 50.0,
+            forceRefresh: true, // 강제 새로고침
+          );
+          
+          // 마커 업데이트
+          _updateMarkers();
+        }
+      });
+    }
   }
   
   Widget _buildHeader() {
@@ -181,6 +210,7 @@ class _MapPageState extends ConsumerState<MapPage> with AutomaticKeepAliveClient
                   GestureDetector(
                     onTap: () {
                       if (_currentPosition != null && _mapController != null && !_isLoadingLocation) {
+                        // 현재 위치가 있으면 지도를 해당 위치로 이동
                         _mapController!.animateCamera(
                           CameraUpdate.newCameraPosition(
                             CameraPosition(
@@ -189,7 +219,8 @@ class _MapPageState extends ConsumerState<MapPage> with AutomaticKeepAliveClient
                             ),
                           ),
                         );
-                      } else {
+                      } else if (!_isLoadingLocation) {
+                        // 위치 가져오기 시도
                         _getCurrentLocation();
                       }
                     },
@@ -221,29 +252,62 @@ class _MapPageState extends ConsumerState<MapPage> with AutomaticKeepAliveClient
     // 이미 초기 로드가 완료되었으면 스킵
     if (_isInitialLoadComplete) return;
     
-    // 초기 로드 시작 표시 (무한 반복 방지)
+    // 초기 로드 시줉 표시 (무한 반복 방지)
     _isInitialLoadComplete = true;
+    
+    // 위치 가져오기 시도
+    setState(() => _isLoadingLocation = true);
+    
+    try {
+      // iOS 시스템 권한 상태 확인
+      final permission = await Geolocator.checkPermission();
+      print('🔍 iOS 시스템 권한 상태: $permission');
+      
+      // 권한이 허용된 경우 위치 가져오기
+      if (permission == LocationPermission.always || permission == LocationPermission.whileInUse) {
+        print('✅ 위치 권한이 허용됨 - 위치 가져오기');
+        await _getCurrentLocation();
+      } else {
+        // 권한이 없으면 서울시청 위치 사용
+        print('📍 권한 없음 - 서울시청 위치 사용');
+        setState(() {
+          _currentPosition = const LatLng(37.5665, 126.9780);
+          _isLoadingLocation = false;
+        });
+        
+        // 서울시청 기준으로 Signal Spot 로드
+        await ref.read(nearbySignalSpotsProvider.notifier).loadNearbySpots(
+          latitude: 37.5665,
+          longitude: 126.9780,
+          radiusKm: 50.0,
+        );
+        
+        _updateMarkers();
+      }
+    } catch (e) {
+      print('❌ 초기 로드 실패: $e');
+      // 오류 발생 시에도 서울시청 위치 사용
+      setState(() {
+        _currentPosition = const LatLng(37.5665, 126.9780);
+        _isLoadingLocation = false;
+      });
+    }
     
     try {
       print('════════════════════════════════════════════');
       print('🚀 _loadInitialData() 시작');
       
-      // 먼저 실제 위치를 가져옴
-      await _getCurrentLocation();
+      // 위치 권한 요청하지 않고, Pre-permission UI가 표시되도록 함
+      // _currentPosition을 null로 유지하여 권한 요청 UI가 먼저 표시됨
+      print('   - 위치 권한 UI 표시를 위해 자동 위치 요청 스킵');
       
-      // 위치가 설정되었는지 확인
-      if (_currentPosition == null) {
-        print('   - ⚠️ 현재 위치가 아직 설정되지 않음');
-        return;
-      }
+      // 기본 위치(서울시청)로 Signal Spot만 로드 (권한 요청 없이)
+      print('   - 기본 위치(서울시청)로 Signal Spot 로드...');
       
-      print('   - 현재 위치: ${_currentPosition!.latitude}, ${_currentPosition!.longitude}');
-      print('   - Signal Spot 로드 시작 (반경 50km)...');
-      
-      // 주변 Signal Spot 로드 (현재 위치 기준)
+      // 서울시청 위치로 Signal Spot 로드 (권한 요청 없이)
       await ref.read(nearbySignalSpotsProvider.notifier).loadNearbySpots(
-        latitude: _currentPosition!.latitude,
-        longitude: _currentPosition!.longitude,
+        latitude: 37.5665,  // 서울시청 위도
+        longitude: 126.9780, // 서울시청 경도
         radiusKm: 50.0,  // 서울 전체 및 수도권을 커버하기 위해 반경 증가
       );
       
@@ -405,7 +469,7 @@ class _MapPageState extends ConsumerState<MapPage> with AutomaticKeepAliveClient
     setState(() => _isLoadingLocation = true);
     
     try {
-      // GPS 위치 가져오기 시도
+      // GPS 위치 가져오기 시도 (getCurrentPosition 내부에서 권한 체크함)
       await ref.read(currentPositionProvider.notifier).getCurrentPosition();
       final positionState = ref.read(currentPositionProvider);
       
@@ -495,7 +559,28 @@ class _MapPageState extends ConsumerState<MapPage> with AutomaticKeepAliveClient
         );
       }
     } catch (e) {
-      print('❌ 위치 가져오기 실패: $e - 서울시청 위치 사용');
+      print('❌ 위치 가져오기 실패: $e');
+      if (e.toString().contains('위치 권한')) {
+        // 권한 문제인 경우
+        if (mounted) {
+          setState(() {
+            _currentPosition = const LatLng(37.5665, 126.9780); // 서울시청 위치 사용
+            _isLoadingLocation = false;
+          });
+        }
+        
+        // 서울시청 기준으로 Signal Spot 로드
+        await ref.read(nearbySignalSpotsProvider.notifier).loadNearbySpots(
+          latitude: 37.5665,
+          longitude: 126.9780,
+          radiusKm: 50.0,
+        );
+        
+        _updateMarkers();
+        return;
+      }
+      
+      // 다른 오류인 경우 서울시청 위치 사용
       if (mounted) {
         setState(() {
           _currentPosition = const LatLng(37.5665, 126.9780);
@@ -1212,8 +1297,8 @@ class _MapPageState extends ConsumerState<MapPage> with AutomaticKeepAliveClient
     print('   - 현재 위치: $_currentPosition');
     print('   - 로딩 상태: $_isLoadingLocation');
     
-    // 위치 로딩 중이거나 위치가 없으면 로딩 화면 표시
-    if (_isLoadingLocation || _currentPosition == null) {
+    // 위치 로딩 중 표시
+    if (_isLoadingLocation) {
       return Scaffold(
         body: Column(
           children: [
@@ -1241,6 +1326,44 @@ class _MapPageState extends ConsumerState<MapPage> with AutomaticKeepAliveClient
                       ),
                     ),
                   ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    
+    // 위치가 없으면 기본적으로 서울시청 위치 사용
+    if (_currentPosition == null) {
+      // 바로 서울시청 위치로 설정
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _currentPosition == null) {
+          setState(() {
+            _currentPosition = const LatLng(37.5665, 126.9780);
+            _isLoadingLocation = false;
+          });
+          
+          // 서울시청 기준으로 Signal Spot 로드
+          ref.read(nearbySignalSpotsProvider.notifier).loadNearbySpots(
+            latitude: 37.5665,
+            longitude: 126.9780,
+            radiusKm: 50.0,
+          );
+          
+          _updateMarkers();
+        }
+      });
+      
+      // 로딩 화면 표시
+      return Scaffold(
+        body: Column(
+          children: [
+            _buildHeader(),
+            const Expanded(
+              child: Center(
+                child: CircularProgressIndicator(
+                  color: AppColors.primary,
                 ),
               ),
             ),

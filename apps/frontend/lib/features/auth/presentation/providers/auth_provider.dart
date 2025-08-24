@@ -251,6 +251,24 @@ class AuthNotifier extends StateNotifier<AuthState> {
     await apiClient.clearTokens();
     print('All tokens cleared successfully');
     
+    // 온보딩 관련 SharedPreferences 데이터 삭제
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('pending_nickname');
+      await prefs.remove('pending_bio');
+      await prefs.remove('pending_profile_image_path');
+      // profileCompleted 캐시도 삭제
+      final keys = prefs.getKeys();
+      for (final key in keys) {
+        if (key.startsWith('profileCompleted_')) {
+          await prefs.remove(key);
+        }
+      }
+      print('Onboarding related data cleared from SharedPreferences');
+    } catch (e) {
+      print('Failed to clear SharedPreferences data: $e');
+    }
+    
     state = const AuthState.unauthenticated();
   }
   

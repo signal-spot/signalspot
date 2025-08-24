@@ -121,7 +121,10 @@ final popularSignalSpotsProvider = StateNotifierProvider<PopularSignalSpotsNotif
 class PopularSignalSpotsNotifier extends StateNotifier<AsyncValue<SignalSpotListResponse>> {
   final SignalService _signalService;
   
-  PopularSignalSpotsNotifier(this._signalService) : super(const AsyncValue.loading());
+  PopularSignalSpotsNotifier(this._signalService) : super(const AsyncValue.loading()) {
+    // 초기화 시 자동으로 로드
+    loadPopularSpots();
+  }
   
   Future<void> loadPopularSpots({
     int limit = 20,
@@ -131,16 +134,37 @@ class PopularSignalSpotsNotifier extends StateNotifier<AsyncValue<SignalSpotList
 
     print("loadpopularspots");
     
-    
     try {
+      // 타임아웃 설정 (5초)
       final response = await _signalService.getPopularSignalSpots(
         limit: limit,
         offset: offset,
+      ).timeout(
+        const Duration(seconds: 5),
+        onTimeout: () {
+          print('❌ Popular spots loading timeout');
+          // 타임아웃 시 빈 리스트 반환
+          return SignalSpotListResponse(
+            success: true,
+            data: [],
+            message: 'Timeout',
+            count: 0,
+          );
+        },
       );
       
       state = AsyncValue.data(response);
     } catch (error, stackTrace) {
-      state = AsyncValue.error(error, stackTrace);
+      print('❌ Error loading popular spots: $error');
+      // 에러 발생 시에도 빈 리스트로 표시
+      state = AsyncValue.data(
+        SignalSpotListResponse(
+          success: false,
+          data: [],
+          message: error.toString(),
+          count: 0,
+        ),
+      );
     }
   }
 }

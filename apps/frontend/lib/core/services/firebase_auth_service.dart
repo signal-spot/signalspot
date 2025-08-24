@@ -85,7 +85,7 @@ class FirebaseAuthService {
           print('FirebaseAuth: Code auto retrieval timeout');
           _verificationId = verificationId;
         },
-        timeout: const Duration(seconds: 180), // 3분으로 늘림
+        timeout: const Duration(seconds: 120), // Android 최대 지원 시간 (2분)
       );
     } catch (e) {
       print('FirebaseAuth: Exception during phone verification: $e');

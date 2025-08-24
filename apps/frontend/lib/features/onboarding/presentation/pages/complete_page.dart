@@ -149,11 +149,11 @@ class _CompletePageState extends ConsumerState<CompletePage>
           SafeArea(
             child: FadeTransition(
               opacity: _fadeAnimation,
-              child: Padding(
+              child: SingleChildScrollView(
                 padding: const EdgeInsets.all(AppSpacing.lg),
                 child: Column(
                   children: [
-                    const Spacer(flex: 2),
+                    const SizedBox(height: AppSpacing.xxl),
                     
                     // Success Icon
                     ScaleTransition(
@@ -246,7 +246,7 @@ class _CompletePageState extends ConsumerState<CompletePage>
                       ),
                     ),
                     
-                    const Spacer(flex: 3),
+                    const SizedBox(height: AppSpacing.xxl * 2),
                     
                     // Start Button
                     SizedBox(

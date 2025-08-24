@@ -18,6 +18,7 @@ import '../../../../shared/models/signal_spot.dart';
 import '../../../../features/auth/presentation/providers/auth_provider.dart';
 import '../../../../features/auth/presentation/models/auth_state.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../shared/providers/signal_provider.dart';
 
 class NoteDetailPage extends ConsumerStatefulWidget {
   final String noteId;
@@ -628,6 +629,9 @@ class _NoteDetailPageState extends ConsumerState<NoteDetailPage>
             icon: const Icon(Icons.more_vert, color: AppColors.white),
             onSelected: (value) {
               switch (value) {
+                case 'delete':
+                  _deleteSignalSpot();
+                  break;
                 case 'profile':
                   _showProfileDialog();
                   break;
@@ -676,6 +680,9 @@ class _NoteDetailPageState extends ConsumerState<NoteDetailPage>
                     userId: authorId,
                     userName: authorName,
                     onBlocked: () {
+                      // 차단 후 지도 데이터 새로고침
+                      ref.invalidate(nearbySignalSpotsProvider);
+                      
                       // 차단 후 이전 화면으로 돌아가기
                       Navigator.of(context).pop();
                     },
@@ -683,39 +690,64 @@ class _NoteDetailPageState extends ConsumerState<NoteDetailPage>
                   break;
               }
             },
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: 'profile',
-                child: Row(
-                  children: [
-                    Icon(Icons.person_outline, size: 20),
-                    SizedBox(width: 8),
-                    Text('프로필 보기'),
-                  ],
+            itemBuilder: (context) {
+              // 현재 사용자 ID 가져오기
+              final authState = ref.watch(authProvider);
+              final currentUserId = authState is AuthenticatedState ? authState.user.id : null;
+              final isOwnPost = currentUserId != null && 
+                  currentUserId == (_noteData['authorId'] ?? _noteData['creatorId'] ?? _noteData['userId']);
+              
+              return [
+                // 자신의 게시물일 때만 삭제 옵션 표시
+                if (isOwnPost) ...[
+                  const PopupMenuItem(
+                    value: 'delete',
+                    child: Row(
+                      children: [
+                        Icon(Icons.delete_outline, size: 20, color: Colors.red),
+                        SizedBox(width: 8),
+                        Text('삭제하기', style: TextStyle(color: Colors.red)),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuDivider(),
+                ],
+                const PopupMenuItem(
+                  value: 'profile',
+                  child: Row(
+                    children: [
+                      Icon(Icons.person_outline, size: 20),
+                      SizedBox(width: 8),
+                      Text('프로필 보기'),
+                    ],
+                  ),
                 ),
-              ),
-              const PopupMenuDivider(),
-              const PopupMenuItem(
-                value: 'report',
-                child: Row(
-                  children: [
-                    Icon(Icons.report, size: 20),
-                    SizedBox(width: 8),
-                    Text('신고하기'),
-                  ],
-                ),
-              ),
-              const PopupMenuItem(
-                value: 'block',
-                child: Row(
-                  children: [
-                    Icon(Icons.block, size: 20, color: Colors.red),
-                    SizedBox(width: 8),
-                    Text('차단하기', style: TextStyle(color: Colors.red)),
-                  ],
-                ),
-              ),
-            ],
+                // 자신의 게시물이 아닐 때만 신고/차단 옵션 표시
+                if (!isOwnPost) ...[
+                  const PopupMenuDivider(),
+                  const PopupMenuItem(
+                    value: 'report',
+                    child: Row(
+                      children: [
+                        Icon(Icons.report, size: 20),
+                        SizedBox(width: 8),
+                        Text('신고하기'),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'block',
+                    child: Row(
+                      children: [
+                        Icon(Icons.block, size: 20, color: Colors.red),
+                        SizedBox(width: 8),
+                        Text('차단하기', style: TextStyle(color: Colors.red)),
+                      ],
+                    ),
+                  ),
+                ],
+              ];
+            },
           ),
         ],
       ),
@@ -1363,6 +1395,76 @@ class _NoteDetailPageState extends ConsumerState<NoteDetailPage>
         ],
       ),
     );
+  }
+
+  Future<void> _deleteSignalSpot() async {
+    // 삭제 확인 다이얼로그
+    final shouldDelete = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('쪽지 삭제'),
+        content: const Text('이 쪽지를 삭제하시겠습니까?\n삭제된 쪽지는 복구할 수 없습니다.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('취소'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('삭제'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldDelete != true) return;
+
+    // 로딩 다이얼로그 표시
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(),
+      ),
+    );
+
+    try {
+      // DELETE API 호출
+      await _signalService.deleteSignalSpot(widget.noteId);
+      
+      // 로딩 다이얼로그 닫기
+      if (mounted) Navigator.pop(context);
+      
+      // 성공 메시지 표시
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('쪽지가 삭제되었습니다'),
+            backgroundColor: AppColors.success,
+          ),
+        );
+        
+        // 이전 화면으로 돌아가기
+        context.pop();
+      }
+    } catch (e) {
+      // 로딩 다이얼로그 닫기
+      if (mounted) Navigator.pop(context);
+      
+      // 에러 메시지 표시
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('삭제 실패: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
   }
 
   void _showProfileDialog() async {

@@ -12,6 +12,8 @@ import '../../../../shared/providers/theme_provider.dart';
 import '../../../../shared/models/index.dart';
 import 'main_navigation.dart';
 import '../../../../shared/widgets/spark_icon.dart';
+// import '../../../../shared/widgets/location_permission_dialog.dart'; // 중복 방지를 위해 제거
+import '../../../../shared/services/location_service.dart';
 
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
@@ -40,59 +42,43 @@ class _HomePageState extends ConsumerState<HomePage> {
 
   Future<void> _loadInitialData() async {
     try {
-      // 현재 위치 가져오기
-      await ref.read(currentPositionProvider.notifier).getCurrentPosition();
+      // 인기 Signal Spots는 위치와 무관하게 먼저 로드
+      print('Loading popular spots...');
+      ref.read(popularSignalSpotsProvider.notifier).loadPopularSpots();
       
-      // 위치를 가져온 후 주변 데이터 로드
-      final position = ref.read(currentPositionProvider).value;
-      print('Current position: ${position?.latitude}, ${position?.longitude}');
-      
-      if (position != null) {
-        print('Loading nearby spots with position: ${position.latitude}, ${position.longitude}');
-        // 주변 Signal Spots 로드
-        ref.read(nearbySignalSpotsProvider.notifier).loadNearbySpots(
-          latitude: position.latitude,
-          longitude: position.longitude,
-        );
-      } else {
-        print('No position available, requesting location permission');
-        // 위치가 없으면 위치 권한 요청 후 재시도
-        final locationService = ref.read(locationServiceProvider);
-        final hasPermission = await locationService.requestLocationPermission();
+      // 현재 위치 가져오기 시도 (비동기로 처리)
+      ref.read(currentPositionProvider.notifier).getCurrentPosition().then((_) {
+        // 위치를 가져온 후 주변 데이터 로드
+        final position = ref.read(currentPositionProvider).value;
+        print('Current position: ${position?.latitude}, ${position?.longitude}');
         
-        if (hasPermission) {
-          // 권한이 허용되면 다시 위치 가져오기 시도
-          await ref.read(currentPositionProvider.notifier).getCurrentPosition();
-          final newPosition = ref.read(currentPositionProvider).value;
-          
-          if (newPosition != null) {
-            ref.read(nearbySignalSpotsProvider.notifier).loadNearbySpots(
-              latitude: newPosition.latitude,
-              longitude: newPosition.longitude,
-            );
-          } else {
-            // 그래도 위치를 못 가져오면 기본값 사용 (서울 시청)
-            print('Still no position available, using default Seoul location');
-            ref.read(nearbySignalSpotsProvider.notifier).loadNearbySpots(
-              latitude: 37.5665,
-              longitude: 126.9780,
-            );
-          }
+        if (position != null) {
+          print('Loading nearby spots with position: ${position.latitude}, ${position.longitude}');
+          // 주변 Signal Spots 로드
+          ref.read(nearbySignalSpotsProvider.notifier).loadNearbySpots(
+            latitude: position.latitude,
+            longitude: position.longitude,
+          );
         } else {
-          // 권한이 거부되면 기본값 사용
-          print('Location permission denied, using default Seoul location');
+          print('No position available, using default location');
+          // 위치를 가져올 수 없으면 기본 위치 사용
           ref.read(nearbySignalSpotsProvider.notifier).loadNearbySpots(
             latitude: 37.5665,
             longitude: 126.9780,
           );
         }
-      }
-      
-      // 인기 Signal Spots 로드
-      ref.read(popularSignalSpotsProvider.notifier).loadPopularSpots();
+      }).catchError((error) {
+        print('Error getting position: $error');
+        // 위치 가져오기 실패 시에도 기본 위치로 로드
+        ref.read(nearbySignalSpotsProvider.notifier).loadNearbySpots(
+          latitude: 37.5665,
+          longitude: 126.9780,
+        );
+      });
       
       // 스파크 데이터 로드
       ref.read(mySparkListProvider.notifier).loadSparks();
+      
       // sparkStatsProvider는 이제 자동 계산되므로 loadStats 호출 불필요
       // ref.read(sparkStatsProvider.notifier).loadStats();
       
@@ -804,28 +790,17 @@ class _HomePageState extends ConsumerState<HomePage> {
                   const SizedBox(height: AppSpacing.sm),
                   TextButton(
                     onPressed: () async {
-                      // 위치 권한 재요청 후 다시 시도
-                      final locationService = ref.read(locationServiceProvider);
-                      final hasPermission = await locationService.requestLocationPermission();
+                      // 직접 위치 요청 (iOS 네이티브 다이얼로그만 표시)
+                      await ref.read(currentPositionProvider.notifier).getCurrentPosition();
+                      final position = ref.read(currentPositionProvider).value;
                       
-                      if (hasPermission) {
-                        await ref.read(currentPositionProvider.notifier).getCurrentPosition();
-                        final position = ref.read(currentPositionProvider).value;
-                        
-                        if (position != null) {
-                          ref.read(nearbySignalSpotsProvider.notifier).loadNearbySpots(
-                            latitude: position.latitude,
-                            longitude: position.longitude,
-                          );
-                        } else {
-                          // 위치를 못 가져오면 기본값 사용
-                          ref.read(nearbySignalSpotsProvider.notifier).loadNearbySpots(
-                            latitude: 37.5665,
-                            longitude: 126.9780,
-                          );
-                        }
+                      if (position != null) {
+                        ref.read(nearbySignalSpotsProvider.notifier).loadNearbySpots(
+                          latitude: position.latitude,
+                          longitude: position.longitude,
+                        );
                       } else {
-                        // 권한이 거부되면 기본값 사용
+                        // 위치를 못 가져오면 기본값 사용
                         ref.read(nearbySignalSpotsProvider.notifier).loadNearbySpots(
                           latitude: 37.5665,
                           longitude: 126.9780,

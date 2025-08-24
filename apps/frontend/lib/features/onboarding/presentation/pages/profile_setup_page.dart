@@ -11,6 +11,7 @@ import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/api/api_client.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../auth/presentation/models/auth_state.dart';
 
 class ProfileSetupPage extends ConsumerStatefulWidget {
   const ProfileSetupPage({super.key});
@@ -52,19 +53,27 @@ class _ProfileSetupPageState extends ConsumerState<ProfileSetupPage>
     // 닉네임 실시간 검증 제거 - 읽기 전용이므로 불필요
     // _nicknameController.addListener(_validateNickname);
     
-    // SharedPreferences에서 저장된 닉네임 가져오기
-    _loadPendingNickname();
+    // 닉네임 로드 - 기존 사용자와 신규 사용자 모두 처리
+    _loadNickname();
   }
   
-  Future<void> _loadPendingNickname() async {
+  Future<void> _loadNickname() async {
+    // SharedPreferences에서 pending_nickname 확인
+    // 온보딩 플로우에서는 항상 닉네임 페이지를 거쳐서 오므로 pending_nickname이 있어야 함
     final prefs = await SharedPreferences.getInstance();
     final pendingNickname = prefs.getString('pending_nickname');
     
     if (pendingNickname != null && pendingNickname.isNotEmpty) {
-      print('ProfileSetupPage: Loading pending nickname: $pendingNickname');
+      print('ProfileSetupPage: Loading pending nickname from SharedPreferences: $pendingNickname');
       setState(() {
         _nicknameController.text = pendingNickname;
         _isNicknameValid = true; // 이미 검증된 닉네임
+      });
+    } else {
+      // 닉네임이 없는 경우 에러 표시
+      print('ProfileSetupPage: No nickname found - this should not happen in normal flow');
+      setState(() {
+        _nicknameError = '닉네임을 불러올 수 없습니다. 처음부터 다시 시작해주세요.';
       });
     }
   }
@@ -227,9 +236,6 @@ class _ProfileSetupPageState extends ConsumerState<ProfileSetupPage>
         ratioX: 1,
         ratioY: 1,
       ),
-      aspectRatioPresets: [
-        CropAspectRatioPreset.square,
-      ],
       uiSettings: [
         AndroidUiSettings(
           toolbarTitle: '프로필 사진 편집',
@@ -245,9 +251,12 @@ class _ProfileSetupPageState extends ConsumerState<ProfileSetupPage>
           cropFrameStrokeWidth: 3,
           cropGridStrokeWidth: 1,
           backgroundColor: Colors.black,
+          aspectRatioPresets: [
+            CropAspectRatioPreset.square,
+          ],
         ),
         IOSUiSettings(
-          title: '프로필 사진 편집',
+      title: '프로필 사진 편집',
           cancelButtonTitle: '취소',
           doneButtonTitle: '완료',
           aspectRatioLockEnabled: true,
@@ -255,6 +264,9 @@ class _ProfileSetupPageState extends ConsumerState<ProfileSetupPage>
           resetButtonHidden: false,
           rotateButtonsHidden: false,
           minimumAspectRatio: 1.0,
+          aspectRatioPresets: [
+            CropAspectRatioPreset.square,
+          ],
         ),
       ],
     );

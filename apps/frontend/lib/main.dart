@@ -13,10 +13,14 @@ import 'core/theme/app_theme.dart';
 import 'core/services/firebase_auth_service.dart';
 import 'core/services/push_notification_service.dart';
 import 'core/services/analytics_service.dart';
+import 'core/services/version_service.dart';
 import 'core/widgets/app_lifecycle_observer.dart';
 
 // Global Firebase Analytics instance
 late final FirebaseAnalytics analytics;
+
+// Global version info for app startup
+VersionCheckResult? globalVersionInfo;
 
 void main() async {
   WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
@@ -95,21 +99,43 @@ void main() async {
   // Google Maps 초기화 완료
   print('✓ Google Maps ready');
   
-  // 모든 초기화 완료 후 스플래시 스크린 제거
-  FlutterNativeSplash.remove();
+  // 버전 체크 (앱 시작 전)
+  try {
+    print('🔄 Checking app version before startup...');
+    final versionService = VersionService();
+    globalVersionInfo = await versionService.checkVersion();
+    
+    if (globalVersionInfo != null && globalVersionInfo!.needsUpdate) {
+      print('📱 Update required - version: ${globalVersionInfo!.currentVersion} -> ${globalVersionInfo!.latestVersion}');
+    } else {
+      print('✅ App is up to date');
+    }
+  } catch (e) {
+    print('⚠️ Version check failed (non-critical): $e');
+    // Continue app startup even if version check fails
+  }
   
+  // 앱 실행
   runApp(
     const ProviderScope(
       child: SignalSpotApp(),
     ),
   );
+  
+  // 스플래시 스크린 제거 (앱이 실행된 후)
+  FlutterNativeSplash.remove();
 }
 
-class SignalSpotApp extends ConsumerWidget {
+class SignalSpotApp extends ConsumerStatefulWidget {
   const SignalSpotApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SignalSpotApp> createState() => _SignalSpotAppState();
+}
+
+class _SignalSpotAppState extends ConsumerState<SignalSpotApp> {
+  @override
+  Widget build(BuildContext context) {
     print('🚀 SignalSpotApp: build() started');
     try {
       final GoRouter router = ref.watch(routerProvider);
@@ -130,7 +156,7 @@ class SignalSpotApp extends ConsumerWidget {
                 // 바깥 클릭 시 키보드 닫기
                 FocusManager.instance.primaryFocus?.unfocus();
               },
-              child: child,
+              child: child ?? const SizedBox.shrink(),
             );
           },
         ),

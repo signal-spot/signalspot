@@ -193,11 +193,11 @@ class _SparksPageState extends ConsumerState<SparksPage>
       await _locationService.updateCurrentLocation();
       print('🎯 스파크 활성화: 초기 위치 전송 완료');
       
-      // 실시간 위치 추적 시작 (앱이 백그라운드에 있을 때도 동작)
-      print('📡 백그라운드 위치 추적 시작 (앱이 살아있는 동안만)...');
+      // 실시간 위치 추적 시작 (포그라운드 서비스로 백그라운드에서도 동작)
+      print('📡 포그라운드 서비스 위치 추적 시작...');
       _locationSubscription = _locationService.getPositionStream().listen(
         (Position position) async {
-          print('📍 [백그라운드] 위치 업데이트: ${position.latitude}, ${position.longitude}');
+          print('📍 [포그라운드 서비스] 위치 업데이트: ${position.latitude}, ${position.longitude}');
           try {
             await _locationService.recordLocation(
               CreateLocationRequest(
@@ -208,14 +208,14 @@ class _SparksPageState extends ConsumerState<SparksPage>
                 speed: position.speed,
               ),
             );
-            print('✅ [백그라운드] 위치 기록 성공');
+            print('✅ [포그라운드 서비스] 위치 기록 성공');
             
-            // 백그라운드에서도 스파크 리스트 갱신
+            // 포그라운드 서비스에서 스파크 리스트 갱신
             if (!mounted) {
-              print('🔄 [백그라운드] 스파크 리스트 갱신 시도');
+              print('🔄 [포그라운드 서비스] 스파크 리스트 갱신 시도');
             }
           } catch (e) {
-            print('❌ [백그라운드] 위치 기록 실패: $e');
+            print('❌ [포그라운드 서비스] 위치 기록 실패: $e');
           }
         },
         onError: (error) {

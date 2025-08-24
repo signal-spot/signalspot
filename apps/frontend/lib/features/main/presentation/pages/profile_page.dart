@@ -1041,38 +1041,39 @@ class _ProfilePageState extends ConsumerState<ProfilePage>
               );
             },
           ),
-          _buildDivider(),
-          _buildMenuItem(
-            icon: Icons.notifications,
-            title: '알림 설정',
-            subtitle: '알림 관리',
-            onTap: () {
-              HapticFeedback.lightImpact();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('준비중입니다'),
-                  backgroundColor: AppColors.primary,
-                  duration: Duration(seconds: 2),
-                ),
-              );
-            },
-          ),
-          _buildDivider(),
-          _buildMenuItem(
-            icon: Icons.help,
-            title: '도움말',
-            subtitle: 'FAQ, 문의하기',
-            onTap: () {
-              HapticFeedback.lightImpact();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('준비중입니다'),
-                  backgroundColor: AppColors.primary,
-                  duration: Duration(seconds: 2),
-                ),
-              );
-            },
-          ),
+          // 알림 설정과 도움말 메뉴 주석 처리 (Apple 리뷰 요청)
+          // _buildDivider(),
+          // _buildMenuItem(
+          //   icon: Icons.notifications,
+          //   title: '알림 설정',
+          //   subtitle: '알림 관리',
+          //   onTap: () {
+          //     HapticFeedback.lightImpact();
+          //     ScaffoldMessenger.of(context).showSnackBar(
+          //       const SnackBar(
+          //         content: Text('준비중입니다'),
+          //         backgroundColor: AppColors.primary,
+          //         duration: Duration(seconds: 2),
+          //       ),
+          //     );
+          //   },
+          // ),
+          // _buildDivider(),
+          // _buildMenuItem(
+          //   icon: Icons.help,
+          //   title: '도움말',
+          //   subtitle: 'FAQ, 문의하기',
+          //   onTap: () {
+          //     HapticFeedback.lightImpact();
+          //     ScaffoldMessenger.of(context).showSnackBar(
+          //       const SnackBar(
+          //         content: Text('준비중입니다'),
+          //         backgroundColor: AppColors.primary,
+          //         duration: Duration(seconds: 2),
+          //       ),
+          //     );
+          //   },
+          // ),
           _buildDivider(),
           _buildMenuItem(
             icon: Icons.description,

@@ -5,6 +5,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_spacing.dart';
+import '../../../../shared/widgets/location_permission_dialog.dart';
 
 class PermissionsPage extends ConsumerStatefulWidget {
   const PermissionsPage({super.key});
@@ -54,6 +55,18 @@ class _PermissionsPageState extends ConsumerState<PermissionsPage> {
 
     try {
       print('Requesting permission: $permission');
+      
+      // 위치 권한인 경우 설명 다이얼로그 먼저 표시
+      if (permission == Permission.location) {
+        final shouldRequest = await showLocationPermissionDialog(context);
+        if (!shouldRequest) {
+          setState(() {
+            _isRequestingPermission = false;
+          });
+          _nextStep(); // 거부해도 다음 단계로
+          return;
+        }
+      }
       
       // 먼저 권한 상태 확인
       var status = await permission.status;

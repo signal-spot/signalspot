@@ -29,20 +29,129 @@ void showReportDialog({
           borderRadius: BorderRadius.circular(AppSpacing.borderRadiusLg),
         ),
         title: const Text('신고 사유 선택'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ...ReportReason.values.map((reason) => RadioListTile<ReportReason>(
-                title: Text(reason.label),
-                value: reason,
-                groupValue: selectedReason,
-                onChanged: (value) {
-                  setState(() {
-                    selectedReason = value;
-                  });
-                },
-              )),
+        content: Container(
+          width: double.maxFinite,
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.6, // 화면 높이의 60%로 제한
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // RadioListTile 대신 컴팩트한 디자인 사용
+                Container(
+                  padding: const EdgeInsets.all(AppSpacing.sm),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(AppSpacing.borderRadiusSm),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.info_outline,
+                            size: 16,
+                            color: AppColors.primary,
+                          ),
+                          const SizedBox(width: AppSpacing.xs),
+                          Text(
+                            '신고 처리 안내',
+                            style: AppTextStyles.labelSmall.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
+                        '• 부적절한 콘텐츠는 검토 후 삭제됩니다\n'
+                            '• 문의: ggprgrkjh@naver.com',
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: AppColors.primary,
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: AppColors.grey200),
+                    borderRadius: BorderRadius.circular(AppSpacing.borderRadiusMd),
+                  ),
+                  child: Column(
+                    children: ReportReason.values.map((reason) => InkWell(
+                      onTap: () {
+                        setState(() {
+                          selectedReason = reason;
+                        });
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.md,
+                          vertical: AppSpacing.sm,
+                        ),
+                        decoration: BoxDecoration(
+                          border: reason != ReportReason.values.last
+                              ? Border(
+                                  bottom: BorderSide(
+                                    color: AppColors.grey200,
+                                    width: 0.5,
+                                  ),
+                                )
+                              : null,
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 20,
+                              height: 20,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: selectedReason == reason
+                                      ? AppColors.primary
+                                      : AppColors.grey400,
+                                  width: 2,
+                                ),
+                              ),
+                              child: selectedReason == reason
+                                  ? Center(
+                                      child: Container(
+                                        width: 10,
+                                        height: 10,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: AppColors.primary,
+                                        ),
+                                      ),
+                                    )
+                                  : null,
+                            ),
+                            const SizedBox(width: AppSpacing.sm),
+                            Expanded(
+                              child: Text(
+                                reason.label,
+                                style: AppTextStyles.bodyMedium.copyWith(
+                                  color: selectedReason == reason
+                                      ? AppColors.primary
+                                      : AppColors.textPrimary,
+                                  fontWeight: selectedReason == reason
+                                      ? FontWeight.w600
+                                      : FontWeight.normal,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )).toList(),
+                  ),
+                ),
               const SizedBox(height: AppSpacing.md),
               TextField(
                 controller: descriptionController,
@@ -54,7 +163,9 @@ void showReportDialog({
                   ),
                 ),
               ),
-            ],
+
+              ],
+            ),
           ),
         ),
         actions: [
@@ -130,8 +241,7 @@ void showBlockDialog({
         '차단하면:\n'
         '• 서로의 프로필을 볼 수 없습니다\n'
         '• 메시지를 주고받을 수 없습니다\n'
-        '• 스파크가 발생하지 않습니다\n\n'
-        '설정에서 차단을 해제할 수 있습니다.',
+        '• 스파크가 발생하지 않습니다\n\n',
         style: AppTextStyles.bodyMedium,
       ),
       actions: [

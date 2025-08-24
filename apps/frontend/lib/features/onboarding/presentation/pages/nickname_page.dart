@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -26,6 +27,7 @@ class _NicknamePageState extends State<NicknamePage>
   bool _isNicknameValid = false;
   bool _isCheckingNickname = false;
   String? _nicknameError;
+  Timer? _debounceTimer;
 
   @override
   void initState() {
@@ -53,32 +55,23 @@ class _NicknamePageState extends State<NicknamePage>
     ));
     
     _animationController.forward();
-    
-    // 닉네임 입력 감지
-    _nicknameController.addListener(_onNicknameChanged);
   }
+  
 
   @override
   void dispose() {
+    _debounceTimer?.cancel();
     _animationController.dispose();
     _nicknameController.dispose();
     _nicknameFocus.dispose();
     super.dispose();
   }
 
-  void _onNicknameChanged() {
-    final nickname = _nicknameController.text.trim();
-    
-    setState(() {
-      _nicknameError = null;
-      _isNicknameValid = false;
-    });
-    
-    if (nickname.isEmpty) return;
-    
+  void _validateNickname(String nickname) {
     if (nickname.length < 2) {
       setState(() {
         _nicknameError = '2글자 이상 입력해주세요';
+        _isNicknameValid = false;
       });
       return;
     }
@@ -86,14 +79,17 @@ class _NicknamePageState extends State<NicknamePage>
     if (nickname.length > 12) {
       setState(() {
         _nicknameError = '12글자 이하로 입력해주세요';
+        _isNicknameValid = false;
       });
       return;
     }
     
     // 특수문자 검사
-    if (!RegExp(r'^[가-힣a-zA-Z0-9_]+$').hasMatch(nickname)) {
+    final regex = RegExp(r'^[가-힣a-zA-Z0-9_]+$');
+    if (!regex.hasMatch(nickname)) {
       setState(() {
         _nicknameError = '한글, 영문, 숫자, _만 사용 가능합니다';
+        _isNicknameValid = false;
       });
       return;
     }
@@ -107,9 +103,6 @@ class _NicknamePageState extends State<NicknamePage>
     });
     
     try {
-      // 디바운싱을 위한 짧은 지연
-      await Future.delayed(const Duration(milliseconds: 500));
-      
       // 실제 API 호출로 닉네임 중복 체크
       final apiClient = ApiClient();
       final response = await apiClient.get('/profile/check-username', queryParameters: {
@@ -226,7 +219,7 @@ class _NicknamePageState extends State<NicknamePage>
                       ),
                       const SizedBox(height: AppSpacing.md),
                       Text(
-                        '@${_nicknameController.text.trim().isEmpty ? 'nickname' : _nicknameController.text.trim()}',
+                        '@${_nicknameController.text.isEmpty ? 'nickname' : _nicknameController.text}',
                         style: AppTextStyles.titleLarge.copyWith(
                           color: _isNicknameValid ? AppColors.primary : AppColors.grey600,
                           fontWeight: FontWeight.w600,
@@ -248,39 +241,89 @@ class _NicknamePageState extends State<NicknamePage>
                 ),
                 const SizedBox(height: AppSpacing.md),
                 
+                // TextField with validation - Korean input support
                 TextField(
                   controller: _nicknameController,
                   focusNode: _nicknameFocus,
-                  maxLength: 12,
-                  style: TextStyle(
+                  keyboardType: TextInputType.text,
+                  textInputAction: TextInputAction.done,
+                  style: const TextStyle(
                     color: AppColors.textPrimary,
                     fontSize: 16,
                   ),
+                  onChanged: (value) {
+                    // 디바운싱을 사용한 검증
+                    _debounceTimer?.cancel();
+                    
+                    // 즉시 길이 체크 (UI 피드백용)
+                    if (value.length > 12) {
+                      // 12자 초과시 자르기
+                      final truncated = value.substring(0, 12);
+                      _nicknameController.text = truncated;
+                      _nicknameController.selection = TextSelection.fromPosition(
+                        TextPosition(offset: truncated.length),
+                      );
+                      return;
+                    }
+                    
+                    // 빈 값일 때 즉시 초기화
+                    if (value.isEmpty) {
+                      setState(() {
+                        _nicknameError = null;
+                        _isNicknameValid = false;
+                        _isCheckingNickname = false;
+                      });
+                      return;
+                    }
+                    
+                    // 검증은 디바운싱 후 실행 (한글 조합 완성 대기)
+                    _debounceTimer = Timer(const Duration(milliseconds: 1200), () {
+                      final trimmed = value.trim();
+                      if (trimmed.isNotEmpty) {
+                        _validateNickname(trimmed);
+                      }
+                    });
+                  },
                   decoration: InputDecoration(
                     hintText: '2-12글자로 입력해주세요',
-                    hintStyle: TextStyle(
+                    hintStyle: const TextStyle(
                       color: AppColors.textSecondary,
                     ),
                     filled: true,
                     fillColor: AppColors.grey50,
+                    counterText: '${_nicknameController.text.length}/12',
+                    counterStyle: TextStyle(
+                      color: _nicknameController.text.length > 12 
+                          ? AppColors.error 
+                          : AppColors.textSecondary,
+                      fontSize: 12,
+                    ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: AppColors.grey300),
+                      borderSide: const BorderSide(color: AppColors.grey300),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: AppColors.grey300),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                       borderSide: BorderSide(
                         color: _nicknameError != null 
                             ? AppColors.error 
-                            : AppColors.primary, 
+                            : AppColors.primary,
                         width: 2,
                       ),
                     ),
                     errorBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: AppColors.error, width: 2),
+                      borderSide: const BorderSide(color: AppColors.error, width: 2),
                     ),
-                    prefixIcon: Icon(Icons.alternate_email, size: 20, color: AppColors.grey600),
+                    prefixIcon: const Icon(
+                      Icons.alternate_email, 
+                      size: 20, 
+                      color: AppColors.grey600,
+                    ),
                     suffixIcon: _isCheckingNickname
                         ? const Padding(
                             padding: EdgeInsets.all(12),
@@ -291,14 +334,12 @@ class _NicknamePageState extends State<NicknamePage>
                             ),
                           )
                         : _isNicknameValid
-                            ? Icon(Icons.check_circle, color: AppColors.success, size: 20)
+                            ? const Icon(Icons.check_circle, color: AppColors.success, size: 20)
                             : _nicknameError != null
-                                ? Icon(Icons.error, color: AppColors.error, size: 20)
+                                ? const Icon(Icons.error, color: AppColors.error, size: 20)
                                 : null,
                     errorText: _nicknameError,
                   ),
-                  // inputFormatters 제거 - 한글 입력 문제 해결
-                  // 유효성 검사는 onChanged에서 처리
                 ),
                 
                 const SizedBox(height: AppSpacing.md),

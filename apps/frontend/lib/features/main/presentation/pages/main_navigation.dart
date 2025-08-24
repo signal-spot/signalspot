@@ -7,6 +7,8 @@ import '../../../../shared/providers/chat_provider.dart';
 import '../../../../shared/providers/location_provider.dart';
 import '../../../../shared/providers/signal_provider.dart';
 import '../../../../shared/providers/theme_provider.dart';
+import '../../../../core/widgets/version_update_dialog.dart';
+import '../../../../main.dart';  // For globalVersionInfo
 import 'home_page.dart';
 import '../../../map/presentation/pages/map_page.dart';
 import 'sparks_page.dart';
@@ -17,11 +19,42 @@ import '../../../../shared/widgets/spark_icon.dart';
 // 현재 선택된 탭을 관리하는 Provider
 final selectedTabProvider = StateProvider<int>((ref) => 0);
 
-class MainNavigation extends ConsumerWidget {
+class MainNavigation extends ConsumerStatefulWidget {
   const MainNavigation({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MainNavigation> createState() => _MainNavigationState();
+}
+
+class _MainNavigationState extends ConsumerState<MainNavigation> {
+  static bool _hasCheckedVersion = false;
+  
+  @override
+  void initState() {
+    super.initState();
+    
+    // Show version update dialog if needed
+    if (!_hasCheckedVersion) {
+      _hasCheckedVersion = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _checkForUpdate();
+      });
+    }
+  }
+  
+  Future<void> _checkForUpdate() async {
+    if (globalVersionInfo != null && globalVersionInfo!.needsUpdate) {
+      print('📱 Showing update dialog from MainNavigation...');
+      try {
+        await VersionUpdateDialog.show(context, globalVersionInfo!);
+      } catch (e) {
+        print('⚠️ Failed to show update dialog: $e');
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     print('🏠 MainNavigation: Starting build');
     
     try {
@@ -34,31 +67,9 @@ class MainNavigation extends ConsumerWidget {
         print('📱 Tab changed from $previous to $next');
         
         if (next == 1) { // 지도 탭 선택시
-          print('🗺️ Map tab selected - triggering nearby spots reload');
-          // 현재 위치 기반으로 주변 Signal Spot 재로드
-          final currentLocation = ref.read(currentLocationProvider);
-          if (currentLocation != null && 
-              currentLocation['latitude'] != null && 
-              currentLocation['longitude'] != null) {
-            ref.read(nearbySignalSpotsProvider.notifier).loadNearbySpots(
-              latitude: currentLocation['latitude']!,
-              longitude: currentLocation['longitude']!,
-              radiusKm: 5.0,
-            );
-          } else {
-            // 위치 정보가 없으면 위치 가져오기 시도
-            print('📍 위치 정보 없음 - 위치 가져오기 시도');
-            ref.read(currentPositionProvider.notifier).getCurrentPosition().then((_) {
-              final newLocation = ref.read(currentLocationProvider);
-              if (newLocation != null) {
-                ref.read(nearbySignalSpotsProvider.notifier).loadNearbySpots(
-                  latitude: newLocation['latitude']!,
-                  longitude: newLocation['longitude']!,
-                  radiusKm: 5.0,
-                );
-              }
-            });
-          }
+          print('🗺️ Map tab selected');
+          // 지도 탭에서 권한 확인 후 위치를 가져오도록 변경
+          // MainNavigation에서는 자동으로 위치를 가져오지 않음
         } else if (next == 3) { // 채팅 탭 선택시
           ref.read(chatRoomsProvider.notifier).loadChatRooms();
         }

@@ -49,17 +49,28 @@ app.*.map.json
 .env.*
 !.env.example
 
-# Firebase
-google-services.json
-GoogleService-Info.plist
-firebase_options.dart
+# Firebase Admin SDK (서버용)
 **/firebase-adminsdk-*.json
 
-# API Keys and Secrets
-ios/Runner/Info.plist
-android/app/src/main/AndroidManifest.xml
+# Android keystore files (보안상 중요)
 *.jks
 *.keystore
+key.properties
+android/key.properties
+
+# Local properties
+android/local.properties
+ios/Flutter/flutter_export_environment.sh
+
+# 임시 파일
+*.tmp
+*.temp
+*.bak
+*~
+
+# 문서 파일 (개발용)
+FIREBASE_SHA_KEYS.md
+GOOGLE_PLAY_RESPONSE.md
 
 # Private configuration
 config/secrets.dart

@@ -29,27 +29,16 @@ class LocationService {
         print('📍 위치 권한 요청 결과: $permission');
       }
       
-      // iOS에서는 "Always" 권한도 요청
+      // iOS와 Android 모두 whileInUse 권한만 사용
+      // 포그라운드 서비스를 통해 백그라운드에서도 위치 추적 가능
       if (Platform.isIOS && permission == LocationPermission.whileInUse) {
-        // iOS에서는 앱 사용 중 권한을 먼저 받고,
-        // 나중에 설정에서 항상 허용으로 변경할 수 있음
-        print('📍 iOS: 위치 권한이 "앱 사용 중"으로 설정됨. 백그라운드 추적을 위해 설정에서 "항상 허용"으로 변경해주세요.');
-        
-        // permission_handler를 사용하여 추가 권한 요청
-        final status = await Permission.locationAlways.request();
-        print('📍 iOS Always 권한 요청 결과: $status');
+        print('📍 iOS: 위치 권한이 "앱 사용 중"으로 설정됨.');
+        print('📍 포그라운드 서비스를 통해 백그라운드에서도 위치 추적이 가능합니다.');
       }
       
-      // Android 13+ 에서 백그라운드 위치 권한 별도 요청
-      if (Platform.isAndroid) {
-        final androidInfo = await Permission.location.status;
-        print('📍 Android 위치 권한 상태: $androidInfo');
-        
-        if (androidInfo.isGranted) {
-          // 백그라운드 위치 권한도 요청
-          final bgStatus = await Permission.locationAlways.request();
-          print('📍 Android 백그라운드 위치 권한 결과: $bgStatus');
-        }
+      if (Platform.isAndroid && permission == LocationPermission.whileInUse) {
+        print('📍 Android: 위치 권한이 설정됨.');
+        print('📍 포그라운드 서비스를 통해 백그라운드에서도 위치 추적이 가능합니다.');
       }
       
       if (permission == LocationPermission.deniedForever) {
@@ -59,6 +48,7 @@ class LocationService {
         return false;
       }
       
+      // whileInUse 권한만으로도 포그라운드 서비스를 통해 충분
       final result = permission == LocationPermission.whileInUse || 
                     permission == LocationPermission.always;
       print('📍 최종 위치 권한 상태: $result (permission: $permission)');
@@ -345,7 +335,7 @@ class LocationService {
           name: 'ic_notification',
           defType: 'drawable',
         ),
-        setOngoing: false, // 앱 종료 시 알림도 함께 제거 (앱 완전 종료 시 추적 중지)
+        setOngoing: true, // 지속적인 알림 표시 (포그라운드 서비스 유지)
       ),
     );
     
@@ -353,7 +343,7 @@ class LocationService {
       accuracy: LocationAccuracy.medium,
       distanceFilter: 20,
       pauseLocationUpdatesAutomatically: true, // 자동 일시정지 활성화 (배터리 절약)
-      showBackgroundLocationIndicator: true, // 백그라운드에서 위치 사용 표시
+      showBackgroundLocationIndicator: false, // 포그라운드 서비스만 사용
       activityType: ActivityType.other, // 일반 앱 활동
     );
     
