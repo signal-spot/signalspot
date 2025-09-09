@@ -310,17 +310,15 @@ export class SignalSpotRepository implements ISignalSpotRepository {
     } = {}
   ): Promise<SignalSpot[]> {
     const conditions: any = {
-      creator: creatorId,
-      isActive: true
+      creator: creatorId
+      // isActive 필터링 제거 - 모든 스팟 조회
     };
 
     if (options.status) {
       conditions.status = options.status;
     }
 
-    if (!options.includeExpired) {
-      conditions.expiresAt = { $gt: new Date() };
-    }
+    // expiresAt 필터링 제거 - 모든 스팟 조회
 
     return await this.repository.find(conditions, {
       populate: ['creator'],
@@ -520,8 +518,9 @@ export class SignalSpotRepository implements ISignalSpotRepository {
     radiusKm?: number,
     limit = 10
   ): Promise<SignalSpot[]> {
+    // 시간 제한 제거 - 모든 시그널스팟에서 트렌딩 계산
     const conditions = {
-      createdAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } // Last 30 days for maximum coverage
+      status: { $ne: SpotStatus.REMOVED }
     };
 
     const allSpots = await this.repository.find(conditions, {
@@ -574,9 +573,7 @@ export class SignalSpotRepository implements ISignalSpotRepository {
     } = {}
   ): Promise<SignalSpot[]> {
     const conditions: any = {
-      isActive: true,
-      status: SpotStatus.ACTIVE,
-      expiresAt: { $gt: new Date() },
+      // isActive와 status 필터링도 제거하여 모든 스팟 검색 가능
       $or: [
         { message: { $like: `%${query}%` } },
         { title: { $like: `%${query}%` } }
@@ -614,9 +611,7 @@ export class SignalSpotRepository implements ISignalSpotRepository {
     } = {}
   ): Promise<SignalSpot[]> {
     const conditions: any = {
-      isActive: true,
-      status: SpotStatus.ACTIVE,
-      expiresAt: { $gt: new Date() }
+      // isActive와 status 필터링 제거 - 모든 태그 스팟 조회 가능
     };
 
     if (options.matchAll) {

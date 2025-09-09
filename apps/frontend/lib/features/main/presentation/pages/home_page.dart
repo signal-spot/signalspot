@@ -14,6 +14,8 @@ import 'main_navigation.dart';
 import '../../../../shared/widgets/spark_icon.dart';
 // import '../../../../shared/widgets/location_permission_dialog.dart'; // 중복 방지를 위해 제거
 import '../../../../shared/services/location_service.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../auth/presentation/models/auth_state.dart';
 
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
@@ -31,6 +33,15 @@ class _HomePageState extends ConsumerState<HomePage> {
     // 초기 데이터 로드
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadInitialData();
+      
+      // 인증 상태 변경 감지하여 popular spots 로드
+      ref.listenManual(authProvider, (previous, next) {
+        if (previous is! AuthenticatedState && next is AuthenticatedState) {
+          // 로그인 성공 시 popular spots 로드
+          print('User logged in, loading popular spots...');
+          ref.read(popularSignalSpotsProvider.notifier).loadPopularSpots();
+        }
+      });
     });
   }
 
@@ -42,9 +53,23 @@ class _HomePageState extends ConsumerState<HomePage> {
 
   Future<void> _loadInitialData() async {
     try {
-      // 인기 Signal Spots는 위치와 무관하게 먼저 로드
-      print('Loading popular spots...');
-      ref.read(popularSignalSpotsProvider.notifier).loadPopularSpots();
+      // 인증 상태 확인 후 인기 Signal Spots 로드
+      final authState = ref.read(authProvider);
+      if (authState is AuthenticatedState) {
+        print('User is authenticated, loading popular spots...');
+        ref.read(popularSignalSpotsProvider.notifier).loadPopularSpots();
+      } else {
+        print('User is not authenticated, skipping popular spots loading');
+        // 인증되지 않은 경우 빈 데이터로 설정
+        ref.read(popularSignalSpotsProvider.notifier).state = AsyncValue.data(
+          SignalSpotListResponse(
+            data: [],
+            count: 0,
+            success: true,
+            message: 'Authentication required',
+          ),
+        );
+      }
       
       // 현재 위치 가져오기 시도 (비동기로 처리)
       ref.read(currentPositionProvider.notifier).getCurrentPosition().then((_) {

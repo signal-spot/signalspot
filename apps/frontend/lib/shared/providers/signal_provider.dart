@@ -121,9 +121,19 @@ final popularSignalSpotsProvider = StateNotifierProvider<PopularSignalSpotsNotif
 class PopularSignalSpotsNotifier extends StateNotifier<AsyncValue<SignalSpotListResponse>> {
   final SignalService _signalService;
   
-  PopularSignalSpotsNotifier(this._signalService) : super(const AsyncValue.loading()) {
-    // 초기화 시 자동으로 로드
-    loadPopularSpots();
+  PopularSignalSpotsNotifier(this._signalService) : super(
+    // 초기 상태를 빈 데이터로 설정 (로딩 대신)
+    AsyncValue.data(
+      SignalSpotListResponse(
+        data: [],
+        count: 0,
+        success: true,
+        message: '',
+      ),
+    ),
+  ) {
+    // 초기화 시 자동 로드 제거 - 로그인 후에만 로드하도록 변경
+    // loadPopularSpots();
   }
   
   Future<void> loadPopularSpots({
