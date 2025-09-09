@@ -87,12 +87,15 @@ class LocationService {
     try {
       // 먼저 낮은 정확도로 빠르게 위치 가져오기 시도
       print('📍 위치 가져오기 시도 중...');
+      print('📍 플랫폼: ${Platform.isAndroid ? "Android" : "iOS"}');
       
       // 위치 서비스 활성화 확인
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
+        print('❌ 위치 서비스가 비활성화되어 있습니다');
         throw Exception('위치 서비스가 비활성화되어 있습니다. 설정에서 활성화해주세요.');
       }
+      print('✅ 위치 서비스 활성화됨');
       
       // 마지막 알려진 위치 먼저 시도
       Position? lastPosition = await Geolocator.getLastKnownPosition();
@@ -102,11 +105,16 @@ class LocationService {
         return lastPosition;
       }
       
+      print('📍 새로운 위치 가져오기 시도...');
       // 새로운 위치 가져오기 (타임아웃 증가, 정확도 낮춤)
-      return await Geolocator.getCurrentPosition(
+      final position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.medium, // high -> medium으로 변경
         timeLimit: const Duration(seconds: 30), // 10초 -> 30초로 증가
       );
+      
+      print('✅ 위치 가져오기 성공: ${position.latitude}, ${position.longitude}');
+      print('   정확도: ${position.accuracy}m');
+      return position;
     } catch (e) {
       print('❌ 위치 가져오기 실패, 대체 방법 시도: $e');
       

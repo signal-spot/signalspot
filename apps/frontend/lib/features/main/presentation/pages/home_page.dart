@@ -893,13 +893,16 @@ class _HomePageState extends ConsumerState<HomePage> {
                       size: 14,
                       color: AppColors.grey500,
                     ),
-                    Text(
-                      '100m', // 실제로는 거리 계산 필요
-                      style: AppTextStyles.bodySmall.copyWith(
-                        color: AppColors.grey600,
+                    if (spot.distanceDisplay.isNotEmpty) ...[
+                      const SizedBox(width: 2),
+                      Text(
+                        spot.distanceDisplay,
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: AppColors.grey600,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
+                      const SizedBox(width: AppSpacing.sm),
+                    ],
                     Text(
                       _formatTimeAgo(spot.createdAt),
                       style: AppTextStyles.bodySmall.copyWith(

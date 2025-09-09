@@ -430,18 +430,25 @@ class _SparksPageState extends ConsumerState<SparksPage>
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
-                          '스파크',
-                          style: AppTextStyles.titleLarge.copyWith(
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.white,
+                        Flexible(
+                          child: Text(
+                            '스파크',
+                            style: AppTextStyles.titleLarge.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.white,
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        Text(
-                          '주변 사람들과 연결하기',
-                          style: AppTextStyles.bodySmall.copyWith(
-                            color: AppColors.white.withOpacity(0.9),
+                        Flexible(
+                          child: Text(
+                            '주변 사람들과 연결하기',
+                            style: AppTextStyles.bodySmall.copyWith(
+                              color: AppColors.white.withOpacity(0.9),
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ],

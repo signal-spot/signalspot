@@ -25,6 +25,11 @@
     
     <!-- Wake Lock for keeping app active -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    
+    <!-- SMS permissions for auto-verification (not required for Firebase Auth) -->
+    <!-- These are optional but help with automatic SMS reading -->
+    <uses-permission android:name="android.permission.RECEIVE_SMS" />
+    <uses-permission android:name="android.permission.READ_SMS" />
 
     <application
         android:label="SignalSpot"

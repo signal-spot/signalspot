@@ -31,6 +31,7 @@ class SignalSpot with _$SignalSpot {
     Map<String, dynamic>? location,  // location 객체
     Map<String, dynamic>? engagement,  // engagement 통계
     Map<String, dynamic>? timing,      // timing 정보
+    double? distanceMeters,  // 현재 위치로부터의 거리 (미터)
   }) = _SignalSpot;
 
   factory SignalSpot.fromJson(Map<String, dynamic> json) {
@@ -97,12 +98,34 @@ class SignalSpot with _$SignalSpot {
       location: json['location'],
       engagement: json['engagement'],
       timing: json['timing'],
+      // 백엔드에서 metadata.distance로 거리 정보 제공
+      distanceMeters: json['metadata']?['distance']?.toDouble(),
     );
   }
   
   // content getter for backward compatibility
   String get displayContent => content ?? message ?? '';
   String get displayUserId => userId ?? creatorId ?? '';
+  
+  // 거리 표시를 위한 헬퍼 메서드
+  String get distanceDisplay {
+    if (distanceMeters == null) return '';
+    
+    final meters = distanceMeters!;
+    
+    if (meters < 1000) {
+      // 1km 미만은 미터 단위로 표시
+      return '${meters.toInt()}m';
+    } else if (meters < 10000) {
+      // 10km 미만은 소수점 1자리까지 표시
+      final km = meters / 1000;
+      return '${km.toStringAsFixed(1)}km';
+    } else {
+      // 10km 이상은 정수로 표시
+      final km = (meters / 1000).round();
+      return '${km}km';
+    }
+  }
   
   Map<String, dynamic> toJson() {
     return {
@@ -129,6 +152,7 @@ class SignalSpot with _$SignalSpot {
       'location': location,
       'engagement': engagement,
       'timing': timing,
+      'distanceMeters': distanceMeters,
     };
   }
 }

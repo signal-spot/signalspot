@@ -252,35 +252,66 @@ class _MapPageState extends ConsumerState<MapPage> with AutomaticKeepAliveClient
     // 이미 초기 로드가 완료되었으면 스킵
     if (_isInitialLoadComplete) return;
     
-    // 초기 로드 시줉 표시 (무한 반복 방지)
+    // 초기 로드 시작 표시 (무한 반복 방지)
     _isInitialLoadComplete = true;
     
     // 위치 가져오기 시도
     setState(() => _isLoadingLocation = true);
     
     try {
-      // iOS 시스템 권한 상태 확인
+      // 플랫폼별 권한 확인
       final permission = await Geolocator.checkPermission();
-      print('🔍 iOS 시스템 권한 상태: $permission');
+      print('🔍 현재 위치 권한 상태: $permission');
+      print('🔍 현재 플랫폼: ${Platform.isAndroid ? "Android" : "iOS"}');
       
-      // 권한이 허용된 경우 위치 가져오기
+      // 권한이 허용된 경우 실제 위치 가져오기
       if (permission == LocationPermission.always || permission == LocationPermission.whileInUse) {
-        print('✅ 위치 권한이 허용됨 - 위치 가져오기');
+        print('✅ 위치 권한이 허용됨 - 실제 위치 가져오기');
         await _getCurrentLocation();
-      } else {
-        // 권한이 없으면 서울시청 위치 사용
-        print('📍 권한 없음 - 서울시청 위치 사용');
-        setState(() {
-          _currentPosition = const LatLng(37.5665, 126.9780);
-          _isLoadingLocation = false;
-        });
         
-        // 서울시청 기준으로 Signal Spot 로드
-        await ref.read(nearbySignalSpotsProvider.notifier).loadNearbySpots(
-          latitude: 37.5665,
-          longitude: 126.9780,
-          radiusKm: 50.0,
-        );
+        // 실제 위치를 가져왔으면 해당 위치로 Signal Spot 로드
+        if (_currentPosition != null) {
+          await ref.read(nearbySignalSpotsProvider.notifier).loadNearbySpots(
+            latitude: _currentPosition!.latitude,
+            longitude: _currentPosition!.longitude,
+            radiusKm: 50.0,
+            forceRefresh: true,
+          );
+        }
+      } else {
+        // 권한이 없으면 권한 요청
+        print('📍 권한 없음 - 권한 요청 중...');
+        final requestedPermission = await Geolocator.requestPermission();
+        
+        if (requestedPermission == LocationPermission.always || 
+            requestedPermission == LocationPermission.whileInUse) {
+          print('✅ 권한 허용됨 - 실제 위치 가져오기');
+          await _getCurrentLocation();
+          
+          // 실제 위치를 가져왔으면 해당 위치로 Signal Spot 로드
+          if (_currentPosition != null) {
+            await ref.read(nearbySignalSpotsProvider.notifier).loadNearbySpots(
+              latitude: _currentPosition!.latitude,
+              longitude: _currentPosition!.longitude,
+              radiusKm: 50.0,
+              forceRefresh: true,
+            );
+          }
+        } else {
+          // 권한 거부시 서울시청 위치 사용
+          print('❌ 권한 거부됨 - 서울시청 위치 사용');
+          setState(() {
+            _currentPosition = const LatLng(37.5665, 126.9780);
+            _isLoadingLocation = false;
+          });
+          
+          // 서울시청 기준으로 Signal Spot 로드
+          await ref.read(nearbySignalSpotsProvider.notifier).loadNearbySpots(
+            latitude: 37.5665,
+            longitude: 126.9780,
+            radiusKm: 50.0,
+          );
+        }
         
         _updateMarkers();
       }
@@ -291,8 +322,13 @@ class _MapPageState extends ConsumerState<MapPage> with AutomaticKeepAliveClient
         _currentPosition = const LatLng(37.5665, 126.9780);
         _isLoadingLocation = false;
       });
+    } finally {
+      setState(() => _isLoadingLocation = false);
     }
-    
+  }
+  
+  void _loadInitialDataOld() async {
+    // 이전 코드는 주석 처리
     try {
       print('════════════════════════════════════════════');
       print('🚀 _loadInitialData() 시작');
@@ -1126,7 +1162,7 @@ class _MapPageState extends ConsumerState<MapPage> with AutomaticKeepAliveClient
                         onPressed: () async {
                           if (titleController.text.isNotEmpty && 
                               contentController.text.isNotEmpty) {
-                              try {
+                            try {
                               // Signal Spot 생성 요청
                               final request = CreateSignalSpotRequest(
                                 content: contentController.text.trim(),
@@ -1161,9 +1197,9 @@ class _MapPageState extends ConsumerState<MapPage> with AutomaticKeepAliveClient
                                 _updateMarkers();
                                 print('🔄 _updateMarkers() 호출 완료');
                               }
-                            
-                            Navigator.pop(context);
-                            
+                              
+                              Navigator.pop(context);
+                              
                               // 성공 메시지
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(

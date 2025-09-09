@@ -42,6 +42,15 @@ void main() async {
         options: DefaultFirebaseOptions.currentPlatform,
       );
       print('✓ Firebase initialized successfully');
+      
+      // Firebase 설정 정보 출력
+      print('========== Firebase Configuration ==========');
+      print('Project ID: ${Firebase.app().options.projectId}');
+      print('App ID: ${Firebase.app().options.appId}');
+      print('API Key: ${Firebase.app().options.apiKey?.substring(0, 10)}...');
+      print('Package Name (expected): com.signalspot.frontend');
+      print('Build Mode: ${const bool.fromEnvironment('dart.vm.product') ? 'RELEASE' : 'DEBUG'}');
+      print('==========================================');
     } else {
       print('✓ Firebase already initialized');
     }

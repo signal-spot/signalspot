@@ -44,7 +44,9 @@ mixin _$SignalSpot {
       throw _privateConstructorUsedError; // location 객체
   Map<String, dynamic>? get engagement =>
       throw _privateConstructorUsedError; // engagement 통계
-  Map<String, dynamic>? get timing => throw _privateConstructorUsedError;
+  Map<String, dynamic>? get timing =>
+      throw _privateConstructorUsedError; // timing 정보
+  double? get distanceMeters => throw _privateConstructorUsedError;
 
   /// Create a copy of SignalSpot
   /// with the given fields replaced by the non-null parameter values.
@@ -84,6 +86,7 @@ abstract class $SignalSpotCopyWith<$Res> {
     Map<String, dynamic>? location,
     Map<String, dynamic>? engagement,
     Map<String, dynamic>? timing,
+    double? distanceMeters,
   });
 }
 
@@ -125,6 +128,7 @@ class _$SignalSpotCopyWithImpl<$Res, $Val extends SignalSpot>
     Object? location = freezed,
     Object? engagement = freezed,
     Object? timing = freezed,
+    Object? distanceMeters = freezed,
   }) {
     return _then(
       _value.copyWith(
@@ -220,6 +224,10 @@ class _$SignalSpotCopyWithImpl<$Res, $Val extends SignalSpot>
                 ? _value.timing
                 : timing // ignore: cast_nullable_to_non_nullable
                       as Map<String, dynamic>?,
+            distanceMeters: freezed == distanceMeters
+                ? _value.distanceMeters
+                : distanceMeters // ignore: cast_nullable_to_non_nullable
+                      as double?,
           )
           as $Val,
     );
@@ -259,6 +267,7 @@ abstract class _$$SignalSpotImplCopyWith<$Res>
     Map<String, dynamic>? location,
     Map<String, dynamic>? engagement,
     Map<String, dynamic>? timing,
+    double? distanceMeters,
   });
 }
 
@@ -299,6 +308,7 @@ class __$$SignalSpotImplCopyWithImpl<$Res>
     Object? location = freezed,
     Object? engagement = freezed,
     Object? timing = freezed,
+    Object? distanceMeters = freezed,
   }) {
     return _then(
       _$SignalSpotImpl(
@@ -394,6 +404,10 @@ class __$$SignalSpotImplCopyWithImpl<$Res>
             ? _value._timing
             : timing // ignore: cast_nullable_to_non_nullable
                   as Map<String, dynamic>?,
+        distanceMeters: freezed == distanceMeters
+            ? _value.distanceMeters
+            : distanceMeters // ignore: cast_nullable_to_non_nullable
+                  as double?,
       ),
     );
   }
@@ -426,6 +440,7 @@ class _$SignalSpotImpl extends _SignalSpot {
     final Map<String, dynamic>? location,
     final Map<String, dynamic>? engagement,
     final Map<String, dynamic>? timing,
+    this.distanceMeters,
   }) : _mediaUrls = mediaUrls,
        _tags = tags,
        _metadata = metadata,
@@ -542,9 +557,13 @@ class _$SignalSpotImpl extends _SignalSpot {
     return EqualUnmodifiableMapView(value);
   }
 
+  // timing 정보
+  @override
+  final double? distanceMeters;
+
   @override
   String toString() {
-    return 'SignalSpot(id: $id, userId: $userId, creatorId: $creatorId, creatorUsername: $creatorUsername, creatorAvatar: $creatorAvatar, content: $content, message: $message, latitude: $latitude, longitude: $longitude, createdAt: $createdAt, expiresAt: $expiresAt, interactionCount: $interactionCount, viewCount: $viewCount, status: $status, mediaUrls: $mediaUrls, tags: $tags, title: $title, isPinned: $isPinned, isReported: $isReported, metadata: $metadata, location: $location, engagement: $engagement, timing: $timing)';
+    return 'SignalSpot(id: $id, userId: $userId, creatorId: $creatorId, creatorUsername: $creatorUsername, creatorAvatar: $creatorAvatar, content: $content, message: $message, latitude: $latitude, longitude: $longitude, createdAt: $createdAt, expiresAt: $expiresAt, interactionCount: $interactionCount, viewCount: $viewCount, status: $status, mediaUrls: $mediaUrls, tags: $tags, title: $title, isPinned: $isPinned, isReported: $isReported, metadata: $metadata, location: $location, engagement: $engagement, timing: $timing, distanceMeters: $distanceMeters)';
   }
 
   @override
@@ -591,7 +610,9 @@ class _$SignalSpotImpl extends _SignalSpot {
               other._engagement,
               _engagement,
             ) &&
-            const DeepCollectionEquality().equals(other._timing, _timing));
+            const DeepCollectionEquality().equals(other._timing, _timing) &&
+            (identical(other.distanceMeters, distanceMeters) ||
+                other.distanceMeters == distanceMeters));
   }
 
   @override
@@ -620,6 +641,7 @@ class _$SignalSpotImpl extends _SignalSpot {
     const DeepCollectionEquality().hash(_location),
     const DeepCollectionEquality().hash(_engagement),
     const DeepCollectionEquality().hash(_timing),
+    distanceMeters,
   ]);
 
   /// Create a copy of SignalSpot
@@ -656,6 +678,7 @@ abstract class _SignalSpot extends SignalSpot {
     final Map<String, dynamic>? location,
     final Map<String, dynamic>? engagement,
     final Map<String, dynamic>? timing,
+    final double? distanceMeters,
   }) = _$SignalSpotImpl;
   const _SignalSpot._() : super._();
 
@@ -704,7 +727,9 @@ abstract class _SignalSpot extends SignalSpot {
   @override
   Map<String, dynamic>? get engagement; // engagement 통계
   @override
-  Map<String, dynamic>? get timing;
+  Map<String, dynamic>? get timing; // timing 정보
+  @override
+  double? get distanceMeters;
 
   /// Create a copy of SignalSpot
   /// with the given fields replaced by the non-null parameter values.

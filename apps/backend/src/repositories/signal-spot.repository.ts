@@ -455,27 +455,6 @@ export class SignalSpotRepository implements ISignalSpotRepository {
     } = {}
   ): Promise<SignalSpot[]> {
     const limit = options.limit || 20;
-    
-    // 기본값을 일주일로 설정
-    const since = new Date();
-    const timeframe = options.timeframe || 'week';
-    
-    switch (timeframe) {
-      case 'hour':
-        since.setHours(since.getHours() - 1);
-        break;
-      case 'day':
-        since.setDate(since.getDate() - 1);
-        break;
-      case 'week':
-        since.setDate(since.getDate() - 7);
-        break;
-      case 'month':
-        since.setMonth(since.getMonth() - 1);
-        break;
-      default:
-        since.setDate(since.getDate() - 7); // 기본값 일주일
-    }
 
     // If coordinates and radius are provided, use nearby logic with popularity sorting
     if (coordinates && radiusKm) {
@@ -497,9 +476,6 @@ export class SignalSpotRepository implements ISignalSpotRepository {
             },
             {
               status: { $ne: SpotStatus.REMOVED },
-            },
-            {
-              createdAt: { $gte: since }
             }
           ],
         },
@@ -522,10 +498,9 @@ export class SignalSpotRepository implements ISignalSpotRepository {
       });
     }
 
-    // Global popular spots - 최근 일주일 이내, expired 여부 상관없이
+    // Global popular spots - 시간 제한 없이 모든 시그널스팟 조회
     const conditions: any = {
-      status: { $ne: SpotStatus.REMOVED },
-      createdAt: { $gte: since }
+      status: { $ne: SpotStatus.REMOVED }
     };
 
     return await this.repository.find(conditions, {
