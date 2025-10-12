@@ -75,3 +75,8 @@ GOOGLE_PLAY_RESPONSE.md
 # Private configuration
 config/secrets.dart
 lib/config/api_keys.dart
+
+# Files containing API keys (hardcoded)
+android/app/src/main/AndroidManifest.xml
+ios/Runner/AppDelegate.swift
+ios/Runner/Info.plist
